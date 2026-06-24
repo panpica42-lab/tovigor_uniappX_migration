@@ -1,0 +1,257 @@
+<template>
+	<view class="page">
+		<view class="header">
+			<text class="back" @click="goBack">‹</text>
+			<view class="header-copy">
+				<text class="title">图片渲染测试</text>
+				<text class="subtitle">PNG / JPG / SVG / WEBP / 网格批量渲染</text>
+			</view>
+		</view>
+
+		<scroll-view class="scroller" scroll-y>
+			<view class="content">
+				<view class="section">
+					<text class="section-title">PNG 大图 aspectFill</text>
+					<view class="big-list">
+						<view class="big-item" v-for="(item, index) in pngImages" :key="index">
+							<view class="hero-frame">
+								<image class="hero-image" :src="item" mode="aspectFill" />
+							</view>
+							<text class="asset-path">{{ item }}</text>
+						</view>
+					</view>
+				</view>
+
+				<view class="section">
+					<text class="section-title">JPG aspectFit</text>
+					<view class="wide-frame">
+						<image class="wide-image" src="/static/icons/freeTrainingActivity/force-curve-fake.jpg" mode="aspectFit" />
+					</view>
+					<text class="asset-path">/static/icons/freeTrainingActivity/force-curve-fake.jpg</text>
+				</view>
+
+				<view class="section">
+					<text class="section-title">SVG 与 PNG 小图标</text>
+					<view class="icon-row">
+						<view class="icon-cell">
+							<image class="icon-image" src="/static/icons/general/btn_general_back.svg" mode="aspectFit" />
+							<text class="icon-label">SVG</text>
+						</view>
+						<view class="icon-cell">
+							<image class="icon-image" src="/static/icons/freeTrainingActivity/ic_counts.png" mode="aspectFit" />
+							<text class="icon-label">PNG</text>
+						</view>
+					</view>
+					<text class="asset-path">/static/icons/general/btn_general_back.svg</text>
+					<text class="asset-path">/static/icons/freeTrainingActivity/ic_counts.png</text>
+				</view>
+
+				<view class="section">
+					<text class="section-title">WEBP aspectFill</text>
+					<view class="hero-frame">
+						<image class="hero-image" src="/static/icons/partTrainingActivity/startTraining/trainingActivity_placeHolder.webp" mode="aspectFill" />
+					</view>
+					<text class="asset-path">/static/icons/partTrainingActivity/startTraining/trainingActivity_placeHolder.webp</text>
+				</view>
+
+				<view class="section">
+					<text class="section-title">动作缩略图网格</text>
+					<view class="grid">
+						<view class="thumb" v-for="(item, index) in actionImages" :key="index">
+							<image class="thumb-image" :src="item" mode="aspectFill" />
+							<text class="thumb-label">{{ index + 1 }}</text>
+						</view>
+					</view>
+					<text class="asset-path">/static/icons/freeTrainingActivity/action-library/ic_action_*.jpg</text>
+				</view>
+			</view>
+		</scroll-view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const pngImages: string[] = [
+	'/static/icons/homeActivity/ic_course_02.png',
+	'/static/icons/homeActivity/ic_course_01.png',
+	'/static/icons/homeActivity/ic_course_03.png',
+	'/static/icons/freeTrainingActivity/ic_decoration.png'
+]
+
+const actionImages: string[] = [
+	'/static/icons/freeTrainingActivity/action-library/ic_action_01.jpg',
+	'/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg',
+	'/static/icons/freeTrainingActivity/action-library/ic_action_03.jpg',
+	'/static/icons/freeTrainingActivity/action-library/ic_action_04.jpg',
+	'/static/icons/freeTrainingActivity/action-library/ic_action_05.jpg',
+	'/static/icons/freeTrainingActivity/action-library/ic_action_06.jpg'
+]
+
+function goBack() {
+	uni.navigateBack()
+}
+</script>
+
+<style>
+.page {
+	height: 100%;
+	background-color: #f3f6fb;
+	display: flex;
+	flex-direction: column;
+}
+
+.header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 28rpx 24rpx 20rpx;
+}
+
+.back {
+	width: 72rpx;
+	font-size: 56rpx;
+	color: #111827;
+}
+
+.header-copy {
+	flex: 1;
+}
+
+.title {
+	font-size: 38rpx;
+	font-weight: 700;
+	color: #111827;
+}
+
+.subtitle {
+	margin-top: 6rpx;
+	font-size: 24rpx;
+	color: #64748b;
+}
+
+.scroller {
+	flex: 1;
+	height: 0;
+}
+
+.content {
+	padding: 0 24rpx 40rpx;
+}
+
+.section {
+	margin-bottom: 24rpx;
+	padding: 22rpx;
+	border-radius: 14rpx;
+	background-color: #ffffff;
+}
+
+.section-title {
+	margin-bottom: 16rpx;
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #111827;
+}
+
+.hero-frame {
+	width: 100%;
+	height: 280rpx;
+	border-radius: 12rpx;
+	overflow: hidden;
+	background-color: #e5e7eb;
+}
+
+.hero-image {
+	width: 100%;
+	height: 280rpx;
+}
+
+.big-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.big-item {
+	margin-bottom: 22rpx;
+}
+
+.wide-frame {
+	width: 100%;
+	height: 220rpx;
+	border-radius: 12rpx;
+	overflow: hidden;
+	background-color: #eef2f7;
+}
+
+.wide-image {
+	width: 100%;
+	height: 220rpx;
+}
+
+.icon-row {
+	display: flex;
+	flex-direction: row;
+	margin-bottom: 12rpx;
+}
+
+.icon-cell {
+	width: 160rpx;
+	height: 150rpx;
+	margin-right: 18rpx;
+	align-items: center;
+	justify-content: center;
+	border-radius: 12rpx;
+	background-color: #f8fafc;
+}
+
+.icon-image {
+	width: 72rpx;
+	height: 72rpx;
+}
+
+.icon-label {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	color: #475569;
+}
+
+.asset-path {
+	margin-top: 10rpx;
+	font-size: 20rpx;
+	color: #64748b;
+}
+
+.grid {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+}
+
+.thumb {
+	position: relative;
+	width: 206rpx;
+	height: 150rpx;
+	margin-right: 14rpx;
+	margin-bottom: 14rpx;
+	border-radius: 12rpx;
+	overflow: hidden;
+	background-color: #e5e7eb;
+}
+
+.thumb-image {
+	width: 206rpx;
+	height: 150rpx;
+}
+
+.thumb-label {
+	position: absolute;
+	right: 10rpx;
+	bottom: 8rpx;
+	width: 34rpx;
+	height: 34rpx;
+	line-height: 34rpx;
+	text-align: center;
+	border-radius: 17rpx;
+	background-color: rgba(17, 24, 39, 0.75);
+	color: #ffffff;
+	font-size: 20rpx;
+}
+</style>

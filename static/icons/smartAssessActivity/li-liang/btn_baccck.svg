@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+  <!-- 灰色圆背景 -->
+  <g opacity="0.8">
+    <circle cx="18" cy="18" r="18" fill="#3A3A3C" />
+  </g>
+
+  <!-- 白色实心左箭头：用 fill 填充，而不是 stroke 画线 -->
+  <path
+    d="M21 10 L13 18 L21 26 L19 28 L9 18 L19 8 Z"
+    fill="#FFFFFF"
+  />
+</svg>

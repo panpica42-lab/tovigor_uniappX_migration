@@ -1,0 +1,117 @@
+import { FORCE_MODE } from '@/utils/serialRuntime.uts'
+
+export type FreeTrainingMode = {
+	key: string
+	title: string
+	shortName: string
+	description: string
+	icon: string
+	forceMode: number
+}
+
+export type FreeTrainingAction = {
+	id: number
+	name: string
+	cover: string
+	part: string
+	method: string
+	equipment: string
+	modeKey: string
+	modeLabel: string
+	forceMode: number
+	defaultResistance: number
+	recommendedSets: number
+	recommendedReps: number
+	sets: number
+	reps: number
+}
+
+export type ActionFilter = {
+	key: string
+	label: string
+	values: string[]
+}
+
+export const freeTrainingModes: FreeTrainingMode[] = [
+	{ key: 'hengli', title: '恒力模式', shortName: '恒力', description: '阻力大小恒定，贴近日常生活和工作', icon: '/static/icons/freeTrainingActivity/ic_force_hengli.png', forceMode: FORCE_MODE.CONST },
+	{ key: 'xiangxin', title: '向心等张模式', shortName: '向心', description: '增肌、减脂、塑性、适合游泳、跑步、滑冰等项目', icon: '/static/icons/freeTrainingActivity/ic_force_xiangxin.png', forceMode: FORCE_MODE.CONC_ISO },
+	{ key: 'lixin', title: '离心等张模式', shortName: '离心', description: '促进内分泌循环，带来更大肌肉维度，促进肌肉生长', icon: '/static/icons/freeTrainingActivity/ic_force_lixin.png', forceMode: FORCE_MODE.ECC_ISO },
+	{ key: 'liuti', title: '流体阻力模式', shortName: '流体', description: '模仿风阻、水阻划船器特性，可以达到全身肌肉有氧练习效果', icon: '/static/icons/freeTrainingActivity/ic_force_liuti.png', forceMode: FORCE_MODE.FLUID },
+	{ key: 'dengsu', title: '等速模式', shortName: '等速', description: '出拳速度恒定，适合康复运动', icon: '/static/icons/freeTrainingActivity/ic_force_dengsu.png', forceMode: FORCE_MODE.BALANCE },
+	{ key: 'tanli', title: '弹力模式', shortName: '弹力', description: '弹性阻力随伸长率变化，有效改善肌力、灵活性，提高运动成绩', icon: '/static/icons/freeTrainingActivity/ic_force_tanli.png', forceMode: FORCE_MODE.ELASTIC }
+]
+
+export const actionFilters: ActionFilter[] = [
+	{ key: 'part', label: '部位', values: ['全部', '胸部', '肩部', '手臂', '腰腹', '背部', '腿部'] },
+	{ key: 'method', label: '方式', values: ['全部', '有力臂', '无力臂'] },
+	{ key: 'equipment', label: '配件', values: ['全部', '双肩把手', '脚环', '三角把手', '中杆', '横杆', '绳索'] }
+]
+
+export function getFreeTrainingMode(key: string): FreeTrainingMode {
+	const found = freeTrainingModes.find((mode: FreeTrainingMode): boolean => mode.key == key)
+	return found != null ? found : freeTrainingModes[0]
+}
+
+function createAction(id: number, name: string, coverFile: string, part: string, method: string, equipment: string, modeKey: string, resistance: number, sets: number, reps: number): FreeTrainingAction {
+	const mode = getFreeTrainingMode(modeKey)
+	return {
+		id,
+		name,
+		cover: '/static/icons/freeTrainingActivity/action-library/' + coverFile,
+		part,
+		method,
+		equipment,
+		modeKey: mode.key,
+		modeLabel: mode.shortName,
+		forceMode: mode.forceMode,
+		defaultResistance: resistance,
+		recommendedSets: sets,
+		recommendedReps: reps,
+		sets,
+		reps
+	}
+}
+
+export const freeTrainingActions: FreeTrainingAction[] = [
+	createAction(1, '低位上拉', 'ic_action_01.jpg', '背部', '有力臂', '横杆', 'hengli', 15, 4, 10),
+	createAction(2, '站姿颈后臂屈伸', 'ic_action_02.jpg', '手臂', '有力臂', '绳索', 'hengli', 15, 4, 10),
+	createAction(3, '进阶脚环弓步上提', 'ic_action_03.jpg', '腿部', '无力臂', '脚环', 'tanli', 20, 3, 12),
+	createAction(4, '站姿交替前平举', 'ic_action_04.jpg', '肩部', '无力臂', '双肩把手', 'xiangxin', 12, 3, 10),
+	createAction(5, '站姿交替弯举', 'ic_action_05.jpg', '手臂', '有力臂', '双肩把手', 'hengli', 13, 3, 12),
+	createAction(6, '脚环站立后蹬', 'ic_action_06.jpg', '腿部', '无力臂', '脚环', 'liuti', 22, 4, 10),
+	createAction(7, '俯身划船', 'ic_action_01.jpg', '背部', '有力臂', '三角把手', 'lixin', 16, 4, 10),
+	createAction(8, '肩部推举', 'ic_action_02.jpg', '肩部', '有力臂', '中杆', 'hengli', 15, 3, 10),
+	createAction(9, '胸部飞鸟', 'ic_action_03.jpg', '胸部', '无力臂', '双肩把手', 'tanli', 12, 3, 15),
+	createAction(10, '深蹲提拉', 'ic_action_04.jpg', '腿部', '有力臂', '绳索', 'dengsu', 24, 4, 8),
+	createAction(11, '背部下拉', 'ic_action_05.jpg', '背部', '有力臂', '横杆', 'liuti', 18, 4, 12),
+	createAction(12, '三头肌下压', 'ic_action_06.jpg', '手臂', '有力臂', '绳索', 'xiangxin', 11, 3, 12)
+]
+
+export function getFreeTrainingAction(id: number): FreeTrainingAction | null {
+	const found = freeTrainingActions.find((action: FreeTrainingAction): boolean => action.id == id)
+	if (found == null) return null
+	return cloneAction(found)
+}
+
+export function cloneAction(action: FreeTrainingAction): FreeTrainingAction {
+	return {
+		id: action.id,
+		name: action.name,
+		cover: action.cover,
+		part: action.part,
+		method: action.method,
+		equipment: action.equipment,
+		modeKey: action.modeKey,
+		modeLabel: action.modeLabel,
+		forceMode: action.forceMode,
+		defaultResistance: action.defaultResistance,
+		recommendedSets: action.recommendedSets,
+		recommendedReps: action.recommendedReps,
+		sets: action.sets,
+		reps: action.reps
+	}
+}
+
+export function cloneActions(actions: FreeTrainingAction[]): FreeTrainingAction[] {
+	return actions.map((action: FreeTrainingAction): FreeTrainingAction => cloneAction(action))
+}

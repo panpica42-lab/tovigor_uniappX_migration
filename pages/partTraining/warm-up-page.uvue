@@ -1,0 +1,191 @@
+<template>
+	<view class="warm-up-page">
+		<image v-if="!showBackgroundVideo" class="background-poster" :src="backgroundPosterSrc" mode="aspectFill" />
+		<video v-if="showBackgroundVideo" id="warmUpVideo" class="background-video" :src="backgroundVideoSrc" loop muted autoplay :controls="false" :show-center-play-btn="false" :show-play-btn="false" object-fit="fill" @ended="restartBackgroundVideo" @error="handleVideoError"></video>
+		<view class="tap-layer" @click="showPanel"></view>
+		<CommonBackButton class="back-btn-position" :useDefault="false" @click="goBack" />
+		<view class="header-title"><text class="title-text">练前热身</text></view>
+		<view class="progress-section"><StepBar :totalSteps="12" :currentStep="currentStep" /></view>
+		<view class="coach-dialog-section">
+			<CoachBoxEntry
+				:text="currentTip"
+				:coachData="selectedCoach"
+				bubble-width="400rpx"
+				@modal-open="handleCoachModalOpen"
+				@modal-close="handleCoachModalClose"
+				@coach-changed="handleCoachChanged"
+			/>
+		</view>
+		<view class="coach-hit-layer" @tap="openCoachModal" @click="openCoachModal"></view>
+		<view class="virtual-character-container">
+			<image class="close-btn-svg" src="/static/icons/general/btn_general_close.svg" mode="aspectFit" />
+			<text class="virtual-title">虚拟形象模拟</text>
+			<image class="virtual-character-image" src="/static/icons/partTrainingActivity/startTraining/virtual-character.png" mode="aspectFit" />
+		</view>
+		<view class="skip-btn" @click="nextStage"><text class="skip-text">跳过热身</text></view>
+		<view v-if="panelVisible" class="control-panel-overlay">
+			<view class="control-panel-mask"></view>
+			<view class="control-buttons">
+				<view class="control-placeholder"></view>
+				<view class="control-btn control-btn-center" @click="hidePanel">
+					<image class="control-icon" src="/static/icons/general/btn_playing_white.svg" mode="aspectFit" />
+				</view>
+				<view class="control-btn control-btn-side" @click="nextStage">
+					<image class="control-icon" src="/static/icons/general/btn_next_step.svg" mode="aspectFit" />
+					<text class="control-btn-text">下一环节</text>
+				</view>
+			</view>
+			<view class="exit-btn" @click="exitTraining"><text class="exit-btn-text">退出训练</text></view>
+		</view>
+		<CoachDetailModal
+			v-if="coachModalVisible"
+			:visible="coachModalVisible"
+			:coachData="selectedCoach"
+			@close="closeCoachModal"
+			@select="selectCoach"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import StepBar from '@/components/ui-box/step-bar.uvue'
+import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal.uvue'
+import { CoachData, getSelectedCoach, getCoachByValue, setSelectedCoach } from '@/utils/coachManager.uts'
+import { navigateBackToRoute } from '@/utils/navigation.uts'
+
+const WARMUP_TIPS = ['1. 上半身保持直立，膝盖不要弯曲', '2. 双手自然下垂，放松肩部肌肉', '3. 缓慢转动颈部，活动肩颈关节', '4. 深呼吸，吸气时腹部膨胀，呼气时收紧', '5. 轻轻扭动腰部，左右各转动 3-5 次', '6. 准备完成，即将开始正式训练']
+const backgroundVideoSrc = '/static/icons/general/video-placeholder-2.mp4'
+const backgroundPosterSrc = '/static/icons/general/video-placeholder-2-poster.jpg'
+const currentStep = ref(1)
+const panelVisible = ref(false)
+const coachModalVisible = ref(false)
+const showBackgroundVideo = ref(false)
+const selectedCoach = ref<CoachData>(getSelectedCoach())
+let timer = 0
+let videoRetryTimer = 0
+
+function clearTimer() {
+	if (timer != 0) {
+		clearInterval(timer)
+		timer = 0
+	}
+	if (videoRetryTimer != 0) {
+		clearTimeout(videoRetryTimer)
+		videoRetryTimer = 0
+	}
+}
+
+function nextStage() {
+	clearTimer()
+	panelVisible.value = false
+	uni.navigateTo({ url: '/pages/partTraining/formal-training' })
+}
+
+function startTimer() {
+	clearTimer()
+	if (panelVisible.value || coachModalVisible.value) return
+	timer = setInterval(() => {
+		if (currentStep.value < 12) {
+			currentStep.value += 1
+		} else {
+			nextStage()
+		}
+	}, 30000)
+}
+
+function playBackgroundVideo() {
+	const videoContext = uni.createVideoContext('warmUpVideo')
+	if (videoContext != null) {
+		videoContext.play()
+	} else {
+		console.log('[TrainingVideo] warm-up video context not found')
+	}
+}
+
+function pauseBackgroundVideo() {
+	const videoContext = uni.createVideoContext('warmUpVideo')
+	if (videoContext != null) {
+		videoContext.pause()
+	}
+}
+
+function showPanel() { panelVisible.value = true; clearTimer(); pauseBackgroundVideo() }
+function hidePanel() { panelVisible.value = false; playBackgroundVideo(); startTimer() }
+function exitTraining() { clearTimer(); panelVisible.value = false; navigateBackToRoute('/pages/partTraining/part-training') }
+function goBack() { clearTimer(); uni.navigateBack() }
+function handleCoachModalOpen() { coachModalVisible.value = true; clearTimer() }
+function handleCoachModalClose() { coachModalVisible.value = false; startTimer() }
+function handleCoachChanged(coachData: CoachData) { selectedCoach.value = coachData }
+function openCoachModal() {
+	console.log('[TrainingCoach] warm-up open coach modal')
+	selectedCoach.value = getSelectedCoach()
+	handleCoachModalOpen()
+}
+function closeCoachModal() { handleCoachModalClose() }
+function selectCoach(coachData: CoachData) {
+	if (!setSelectedCoach(coachData.value)) return
+	const savedCoach = getCoachByValue(coachData.value)
+	if (savedCoach != null) selectedCoach.value = savedCoach
+}
+
+function restartBackgroundVideo() {
+	const videoContext = uni.createVideoContext('warmUpVideo')
+	if (videoContext != null) {
+		videoContext.seek(0)
+		videoContext.play()
+	}
+}
+
+function scheduleVideoPlay() {
+	if (videoRetryTimer != 0) {
+		clearTimeout(videoRetryTimer)
+	}
+	videoRetryTimer = setTimeout(() => {
+		videoRetryTimer = 0
+		showBackgroundVideo.value = true
+		setTimeout(() => { playBackgroundVideo() }, 80)
+	}, 300)
+}
+
+function handleVideoError(event: UniVideoErrorEvent) {
+	console.log('[TrainingVideo] warm-up video error: ' + JSON.stringify(event.detail))
+}
+
+const currentTip = computed<string>(() => WARMUP_TIPS[Math.min(5, Math.ceil(currentStep.value / 2) - 1)])
+
+onMounted(() => { startTimer() })
+onReady(() => { scheduleVideoPlay() })
+onBeforeUnmount(() => { clearTimer() })
+</script>
+
+<style>
+.warm-up-page { position: relative; flex: 1; width: 750rpx; height: 100%; background-color: #000000; overflow: hidden; }
+.background-video, .background-poster { position: absolute; left: 0; right: 0; top: 0; bottom: 0; width: 750rpx; height: 100%; }
+.tap-layer { position: absolute; left: 0; right: 0; top: 320rpx; bottom: 340rpx; width: 750rpx; }
+.background-video, .background-poster { z-index: 0; }
+.tap-layer { z-index: 1; }
+.back-btn-position { position: absolute; left: 24rpx; top: 30rpx; z-index: 5; }
+.header-title { position: absolute; left: 0; right: 0; top: 42rpx; height: 52rpx; align-items: center; justify-content: center; }
+.title-text { font-size: 34rpx; font-weight: 700; color: #ffffff; }
+.progress-section { position: absolute; left: 112rpx; right: 112rpx; top: 112rpx; height: 16rpx; }
+.coach-dialog-section { position: absolute; left: 38rpx; top: 162rpx; z-index: 30; }
+.coach-hit-layer { position: absolute; left: 38rpx; top: 162rpx; width: 440rpx; height: 170rpx; z-index: 420; background-color: rgba(0,0,0,0.001); }
+.virtual-character-container { position: absolute; left: 34rpx; bottom: 46rpx; width: 252rpx; height: 270rpx; border-radius: 8rpx; background-color: rgba(255,255,255,0.88); align-items: center; }
+.close-btn-svg { position: absolute; left: 12rpx; top: 12rpx; width: 28rpx; height: 28rpx; }
+.virtual-title { margin-top: 20rpx; font-size: 22rpx; color: #334155; }
+.virtual-character-image { width: 212rpx; height: 202rpx; margin-top: 10rpx; }
+.skip-btn { position: absolute; right: 32rpx; bottom: 54rpx; width: 156rpx; height: 60rpx; border-radius: 30rpx; background-color: rgba(255,255,255,0.86); align-items: center; justify-content: center; }
+.skip-text { font-size: 24rpx; font-weight: 600; color: #1f2937; }
+.control-panel-overlay, .control-panel-mask { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.control-panel-overlay { z-index: 500; background-color: rgba(0,0,0,0.55); align-items: center; justify-content: center; }
+.control-panel-mask { z-index: 0; }
+.control-buttons { position: relative; z-index: 2; width: 450rpx; display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.control-btn { align-items: center; }
+.control-placeholder, .control-btn-side, .control-btn-center { width: 130rpx; align-items: center; }
+.control-icon { width: 76rpx; height: 76rpx; }
+.control-btn-text { margin-top: 8rpx; font-size: 22rpx; color: #ffffff; }
+.exit-btn { position: absolute; z-index: 2; bottom: 80rpx; left: 285rpx; width: 180rpx; height: 64rpx; border-radius: 32rpx; background-color: rgba(255,255,255,0.18); border-width: 1rpx; border-style: solid; border-color: rgba(255,255,255,0.36); align-items: center; justify-content: center; }
+.exit-btn-text { font-size: 26rpx; font-weight: 600; color: #ffffff; }
+</style>

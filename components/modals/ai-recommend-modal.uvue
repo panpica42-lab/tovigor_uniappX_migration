@@ -1,0 +1,178 @@
+<template>
+	<view v-if="visible" class="modal-overlay">
+		<view class="modal-mask" @click="close"></view>
+		<view class="modal-shell">
+			<view class="modal-close" @click="close">
+				<text class="modal-close-text">×</text>
+			</view>
+
+			<view class="modal-banner">
+				<text class="modal-banner-text">请填写以下信息，AI教练帮你推荐课程</text>
+				<image class="modal-banner-avatar" src="/static/icons/partTrainingActivity/AI_coach_Vince.png" mode="aspectFit" />
+			</view>
+
+			<view class="modal-card">
+				<text class="modal-title">基本信息</text>
+
+				<view class="modal-body">
+					<view class="section-block">
+						<text class="section-label">性别</text>
+						<view class="chip-row compact">
+							<view v-for="option in genderOptions" :key="option.value" class="choice-chip" :class="{ active: formGender == option.value }" @click="setGender(option.value)">
+								<text class="choice-chip-text" :class="{ active: formGender == option.value }">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="section-block">
+						<view class="section-head">
+							<text class="section-label">身高</text>
+							<text class="section-unit">单位：cm</text>
+						</view>
+						<text class="metric-value">{{ formHeight }}</text>
+						<slider class="metric-slider" :min="140" :max="200" :value="formHeight" active-color="#A3D63D" background-color="#F3F4F6" block-color="#A3D63D" :block-size="24" @changing="onHeightChanging" @change="onHeightChange" />
+					</view>
+
+					<view class="section-block">
+						<view class="section-head">
+							<text class="section-label">体重</text>
+							<text class="section-unit">单位：KG</text>
+						</view>
+						<text class="metric-value">{{ formWeight }}</text>
+						<slider class="metric-slider" :min="30" :max="90" :value="formWeight" active-color="#A3D63D" background-color="#F3F4F6" block-color="#A3D63D" :block-size="24" @changing="onWeightChanging" @change="onWeightChange" />
+					</view>
+
+					<view class="section-block">
+						<text class="section-label">训练目的</text>
+						<view class="chip-row">
+							<view v-for="option in goalOptions" :key="option.value" class="choice-chip" :class="{ active: formGoal == option.value }" @click="setGoal(option.value)">
+								<text class="choice-chip-text" :class="{ active: formGoal == option.value }">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="section-block">
+						<text class="section-label">训练部位</text>
+						<view class="chip-row">
+							<view v-for="option in partOptions" :key="option.value" class="choice-chip" :class="{ active: formPart == option.value }" @click="setPart(option.value)">
+								<text class="choice-chip-text" :class="{ active: formPart == option.value }">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="section-block">
+						<text class="section-label">难度</text>
+						<view class="chip-row compact">
+							<view v-for="option in levelOptions" :key="option.value" class="choice-chip" :class="{ active: formLevel == option.value }" @click="setLevel(option.value)">
+								<text class="choice-chip-text" :class="{ active: formLevel == option.value }">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+
+					<view class="section-block last">
+						<text class="section-label">训练方式</text>
+						<view class="chip-row compact">
+							<view v-for="option in methodOptions" :key="option.value" class="choice-chip" :class="{ active: formMethod == option.value }" @click="setMethod(option.value)">
+								<text class="choice-chip-text" :class="{ active: formMethod == option.value }">{{ option.label }}</text>
+							</view>
+						</view>
+					</view>
+				</view>
+
+				<view class="action-wrap">
+					<view class="action-button" @click="handleStart">
+						<text class="action-button-text">开始分析</text>
+					</view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { AiRecommendForm } from '@/pages/partTraining/course-data.uts'
+
+type RecommendOption = {
+	value: string
+	label: string
+}
+
+defineProps<{
+	visible: boolean
+}>()
+const emit = defineEmits(['close', 'start'])
+
+const genderOptions: RecommendOption[] = [{ value: 'female', label: '女' }, { value: 'male', label: '男' }]
+const goalOptions: RecommendOption[] = [{ value: 'fat-loss', label: '减脂塑形' }, { value: 'muscle', label: '增肌增力' }, { value: 'health', label: '全面健康' }, { value: 'wellness', label: '健康养生' }, { value: 'youth', label: '青少年适能' }]
+const partOptions: RecommendOption[] = [{ value: 'shoulder', label: '肩部' }, { value: 'arm', label: '手臂' }, { value: 'back', label: '背部' }, { value: 'chest', label: '胸部' }, { value: 'core', label: '腰腹' }, { value: 'leg', label: '臀腿' }, { value: 'full-body', label: '全身' }]
+const levelOptions: RecommendOption[] = [{ value: 'beginner', label: '初级' }, { value: 'intermediate', label: '中级' }, { value: 'advanced', label: '高级' }]
+const methodOptions: RecommendOption[] = [{ value: 'resistance', label: '有力臂' }, { value: 'no-resistance', label: '无力臂' }]
+
+const formGender = ref('female')
+const formHeight = ref(160)
+const formWeight = ref(45)
+const formGoal = ref('fat-loss')
+const formPart = ref('shoulder')
+const formLevel = ref('intermediate')
+const formMethod = ref('resistance')
+
+function readSliderValue(event: UniSliderChangeEvent): number {
+	return parseInt(event.detail.value.toString(), 10)
+}
+
+function setGender(value: string) { formGender.value = value }
+function setGoal(value: string) { formGoal.value = value }
+function setPart(value: string) { formPart.value = value }
+function setLevel(value: string) { formLevel.value = value }
+function setMethod(value: string) { formMethod.value = value }
+function onHeightChanging(event: UniSliderChangeEvent) { formHeight.value = readSliderValue(event) }
+function onHeightChange(event: UniSliderChangeEvent) { formHeight.value = readSliderValue(event) }
+function onWeightChanging(event: UniSliderChangeEvent) { formWeight.value = readSliderValue(event) }
+function onWeightChange(event: UniSliderChangeEvent) { formWeight.value = readSliderValue(event) }
+
+function close() {
+	emit('close')
+}
+
+function handleStart() {
+	const form: AiRecommendForm = {
+		gender: formGender.value,
+		height: formHeight.value,
+		weight: formWeight.value,
+		goal: formGoal.value,
+		part: formPart.value,
+		level: formLevel.value,
+		method: formMethod.value
+	}
+	emit('start', form.gender + '|' + form.height.toString() + '|' + form.weight.toString() + '|' + form.goal + '|' + form.part + '|' + form.level + '|' + form.method)
+}
+</script>
+
+<style>
+.modal-overlay { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 9998; background-color: rgba(0,0,0,0.24); align-items: center; justify-content: center; padding: 18rpx; }
+.modal-mask { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 0; }
+.modal-shell { position: relative; z-index: 2; width: 620rpx; padding-top: 76rpx; }
+.modal-close { position: absolute; left: 4rpx; top: 8rpx; z-index: 3; width: 52rpx; height: 52rpx; border-radius: 26rpx; background-color: rgba(191,225,252,0.96); border-width: 4rpx; border-style: solid; border-color: #1D2939; align-items: center; justify-content: center; }
+.modal-close-text { font-size: 30rpx; line-height: 32rpx; font-weight: 700; color: #111111; }
+.modal-banner { position: absolute; right: 0; top: 0; z-index: 2; width: 556rpx; height: 68rpx; padding-left: 24rpx; padding-right: 94rpx; border-radius: 34rpx; background-color: #65b1fe; flex-direction: row; align-items: center; box-shadow: 0 10rpx 24rpx rgba(76,148,236,0.24); }
+.modal-banner-text { font-size: 20rpx; font-weight: 600; color: #ffffff; }
+.modal-banner-avatar { position: absolute; right: 8rpx; bottom: 0; width: 88rpx; height: 88rpx; }
+.modal-card { width: 620rpx; height: 78%; padding: 26rpx 22rpx 20rpx; border-radius: 30rpx; background-color: #ffffff; box-shadow: 0 22rpx 52rpx rgba(0,0,0,0.16); display: flex; flex-direction: column; overflow: hidden; }
+.modal-title { text-align: center; font-size: 29rpx; font-weight: 700; color: #1F2937; margin-bottom: 14rpx; }
+.modal-body { flex: 1; display: flex; flex-direction: column; }
+.section-block { margin-bottom: 12rpx; }
+.section-block.last { margin-bottom: 0; }
+.section-head { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 4rpx; }
+.section-label { font-size: 23rpx; font-weight: 700; color: #111827; margin-bottom: 6rpx; }
+.section-unit { font-size: 17rpx; font-weight: 600; color: #374151; }
+.metric-value { text-align: center; font-size: 29rpx; font-weight: 700; color: #1F2937; margin-bottom: 5rpx; }
+.metric-slider { height: 50rpx; }
+.chip-row { display: flex; flex-direction: row; flex-wrap: wrap; }
+.choice-chip { min-width: 78rpx; height: 35rpx; padding: 0 12rpx; margin-right: 9rpx; margin-bottom: 9rpx; border-radius: 18rpx; background-color: #E5E7EB; align-items: center; justify-content: center; }
+.choice-chip.active { background-color: #A3D63D; }
+.choice-chip-text { font-size: 17rpx; font-weight: 600; color: #9CA3AF; }
+.choice-chip-text.active { color: #ffffff; }
+.action-wrap { padding-left: 96rpx; padding-right: 96rpx; padding-top: 14rpx; }
+.action-button { height: 56rpx; border-radius: 28rpx; background-color: #9DD738; align-items: center; justify-content: center; box-shadow: 0 8rpx 16rpx rgba(157,215,56,0.2); }
+.action-button-text { font-size: 25rpx; font-weight: 700; color: #ffffff; }
+</style>

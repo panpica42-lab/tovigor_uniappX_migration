@@ -1,0 +1,133 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "Tovigor X",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/system/wifi",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/poc/training-runtime-poc",
+			"style": {
+				"navigationBarTitleText": "训练 POC",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/poc/image-render-test",
+			"style": {
+				"navigationBarTitleText": "图片渲染测试",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/freeTraining/free-training-intro",
+			"style": {
+				"navigationBarTitleText": "自由训练",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/freeTraining/action-library",
+			"style": {
+				"navigationBarTitleText": "动作库",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/freeTraining/selected-action",
+			"style": {
+				"navigationBarTitleText": "选中动作",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/freeTraining/action-training",
+			"style": {
+				"navigationBarTitleText": "动作训练",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/freeTraining/free-training",
+			"style": {
+				"navigationBarTitleText": "自由训练 X",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/part-training",
+			"style": {
+				"navigationBarTitleText": "部位训练",
+				"navigationStyle": "custom",
+				"backgroundColor": "#F5F5F5",
+				"backgroundColorTop": "#F5F5F5",
+				"backgroundColorBottom": "#F5F5F5",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/course-detail-adapter",
+			"style": {
+				"navigationBarTitleText": "课程详情",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/adjust-equipment",
+			"style": {
+				"navigationBarTitleText": "调整器械",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/warm-up-page",
+			"style": {
+				"navigationBarTitleText": "练前热身",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/formal-training",
+			"style": {
+				"navigationBarTitleText": "正式训练 X",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/partTraining/cool-down-page",
+			"style": {
+				"navigationBarTitleText": "练后拉伸",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "Tovigor X",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8",
+		"disableScroll": true
+	},
+	"uniIdRouter": {}
+}

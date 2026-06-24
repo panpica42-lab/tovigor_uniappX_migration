@@ -1,0 +1,166 @@
+<template>
+	<view class="line-chart">
+		<view class="grid">
+			<view class="grid-line"></view>
+			<view class="grid-line center-line"></view>
+			<view class="grid-line"></view>
+		</view>
+		<view class="segments">
+			<view
+				v-for="(segment, index) in lineSegments"
+				:key="index"
+				class="segment"
+				:class="{ 'segment-negative': segment.negative }"
+				:style="segment.style"
+			></view>
+			<view
+				v-for="(dot, index) in pointDots"
+				:key="'dot-' + index"
+				class="dot"
+				:class="{ 'dot-negative': dot.negative }"
+				:style="dot.style"
+			></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type StyledPoint = {
+	style: string
+	negative: boolean
+}
+
+type StyledSegment = {
+	style: string
+	negative: boolean
+}
+
+const props = defineProps<{
+	values: number[]
+	maxAbsValue: number
+	slotCount: number
+}>()
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, value))
+}
+
+function valueToY(value: number, maxAbsValue: number): number {
+	const normalized = clamp(value / maxAbsValue, -1, 1)
+	return 50 - normalized * 42
+}
+
+function formatPercent(value: number): string {
+	return value.toFixed(2) + '%'
+}
+
+function displayValues(): number[] {
+	const slots = Math.max(2, props.slotCount)
+	const source = props.values.slice(Math.max(0, props.values.length - slots))
+	const result: number[] = []
+	const padCount = Math.max(0, slots - source.length)
+	for (let i = 0; i < padCount; i += 1) result.push(0)
+	source.forEach((value) => { result.push(value) })
+	return result
+}
+
+const pointDots = computed((): StyledPoint[] => {
+	const values = displayValues()
+	const maxAbsValue = Math.max(1, props.maxAbsValue)
+	const step = 100 / Math.max(1, values.length - 1)
+	const result: StyledPoint[] = []
+	values.forEach((value, index) => {
+		const x = step * index
+		const y = valueToY(value, maxAbsValue)
+		result.push({
+			style: 'left:' + formatPercent(x) + ';top:' + formatPercent(y) + ';',
+			negative: value < 0
+		})
+	})
+	return result
+})
+
+const lineSegments = computed((): StyledSegment[] => {
+	const values = displayValues()
+	const maxAbsValue = Math.max(1, props.maxAbsValue)
+	const step = 100 / Math.max(1, values.length - 1)
+	const result: StyledSegment[] = []
+	for (let i = 0; i < values.length - 1; i += 1) {
+		const startY = valueToY(values[i], maxAbsValue)
+		const endY = valueToY(values[i + 1], maxAbsValue)
+		const deltaY = endY - startY
+		const angle = Math.atan2(deltaY, step) * 180 / Math.PI
+		const left = step * i
+		const width = Math.sqrt(step * step + deltaY * deltaY)
+		result.push({
+			style: 'left:' + formatPercent(left) + ';top:' + formatPercent(startY) + ';width:' + formatPercent(width) + ';transform:rotate(' + angle.toFixed(2) + 'deg);',
+			negative: values[i] < 0 && values[i + 1] < 0
+		})
+	}
+	return result
+})
+</script>
+
+<style>
+.line-chart {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-height: 72rpx;
+	border-radius: 16rpx;
+	background-color: #F8FAFC;
+	overflow: hidden;
+}
+
+.grid {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	justify-content: space-around;
+}
+
+.grid-line {
+	height: 1px;
+	background-color: #E2E8F0;
+}
+
+.center-line {
+	background-color: #94A3B8;
+}
+
+.segments {
+	position: absolute;
+	left: 18rpx;
+	right: 18rpx;
+	top: 10rpx;
+	bottom: 10rpx;
+}
+
+.segment {
+	position: absolute;
+	height: 3rpx;
+	border-radius: 3rpx;
+	background-color: #10B981;
+	transform-origin: left center;
+}
+
+.segment-negative {
+	background-color: #F97316;
+}
+
+.dot {
+	position: absolute;
+	width: 8rpx;
+	height: 8rpx;
+	margin-left: -4rpx;
+	margin-top: -4rpx;
+	border-radius: 4rpx;
+	background-color: #10B981;
+}
+
+.dot-negative {
+	background-color: #F97316;
+}
+</style>

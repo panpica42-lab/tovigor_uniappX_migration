@@ -1,0 +1,38 @@
+<template>
+	<view class="filter-pill" :class="{ active }" @click="handleClick">
+		<text class="filter-pill-text" :class="{ active }">{{ label }}</text>
+		<text v-if="showArrow" class="filter-pill-arrow" :class="{ active }">{{ active ? '⌃' : '⌄' }}</text>
+	</view>
+</template>
+
+<script setup lang="uts">
+defineProps<{
+	label: string
+	active: boolean
+	showArrow: boolean
+}>()
+const emit = defineEmits(['click'])
+
+function handleClick() {
+	emit('click')
+}
+</script>
+
+<style>
+.filter-pill {
+	height: 40rpx;
+	margin-bottom: 6rpx;
+	padding: 0 14rpx;
+	border-radius: 999rpx;
+	background-color: #f1f1f1;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+.filter-pill.active { background-color: #333333; }
+.filter-pill-text { font-size: 19rpx; color: #333333; font-weight: 600; }
+.filter-pill-text.active { color: #ffffff; }
+.filter-pill-arrow { font-size: 17rpx; color: #777777; }
+.filter-pill-arrow.active { color: #ffffff; }
+</style>

@@ -1,0 +1,220 @@
+<template>
+	<view class="sidebar">
+		<view class="ai-header">
+			<view class="ai-recommend-btn" @click="goToAIRecommend">
+				<image class="ai-avatar" src="/static/icons/partTrainingActivity/AI_coach_Vince.png" mode="aspectFit" />
+				<text class="ai-text">AI推荐</text>
+			</view>
+		</view>
+
+		<scroll-view class="filter-list" scroll-y="true" :show-scrollbar="false">
+			<view class="filter-title" :class="{ pending: hasPendingChanges, applied: hasAppliedFilters && !hasPendingChanges }" @click="applyFilters">
+				<text class="filter-title-text">{{ hasPendingChanges ? '应用筛选' : '筛选' }}</text>
+				<view v-if="filterCount > 0" class="filter-count-badge">
+					<text class="filter-count-text">{{ filterCount }}</text>
+				</view>
+			</view>
+
+			<view class="library-switch">
+				<view class="library-switch-btn active"><text class="library-switch-text active">课程库</text></view>
+				<view class="library-switch-btn" @click="goActionLibrary"><text class="library-switch-text">动作库</text></view>
+			</view>
+
+			<FilterPill label="性别" :active="expandedGender" :showArrow="true" @click="toggleGender" />
+			<view v-if="expandedGender" class="filter-options">
+				<view v-for="option in genderOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('gender', option.value) }" @click="changeFilter('gender', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="目的" :active="expandedGoal" :showArrow="true" @click="toggleGoal" />
+			<view v-if="expandedGoal" class="filter-options">
+				<view v-for="option in goalOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('goal', option.value) }" @click="changeFilter('goal', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="难度" :active="expandedLevel" :showArrow="true" @click="toggleLevel" />
+			<view v-if="expandedLevel" class="filter-options">
+				<view v-for="option in levelOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('level', option.value) }" @click="changeFilter('level', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="部位" :active="expandedPart" :showArrow="true" @click="togglePart" />
+			<view v-if="expandedPart" class="filter-options">
+				<view v-for="option in partOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('part', option.value) }" @click="changeFilter('part', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="训练方式" :active="expandedMethod" :showArrow="true" @click="toggleMethod" />
+			<view v-if="expandedMethod" class="filter-options">
+				<view v-for="option in methodOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('method', option.value) }" @click="changeFilter('method', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="时长" :active="expandedDuration" :showArrow="true" @click="toggleDuration" />
+			<view v-if="expandedDuration" class="filter-options">
+				<view v-for="option in durationOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('duration', option.value) }" @click="changeFilter('duration', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="配件" :active="expandedEquipment" :showArrow="true" @click="toggleEquipment" />
+			<view v-if="expandedEquipment" class="filter-options">
+				<view v-for="option in equipmentOptions" :key="option.value" class="option-chip" :class="{ active: hasValue('equipment', option.value) }" @click="changeFilter('equipment', option.value)">
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<FilterPill label="AI教练" :active="expandedCoach" :showArrow="true" @click="toggleCoach" />
+			<view v-if="expandedCoach" class="coach-options">
+				<view
+					v-for="coach in coachOptions"
+					:key="coach.value"
+					class="coach-card"
+					:class="{ active: hasValue('coach', coach.value), vince: coach.value == 'vince', vera: coach.value == 'vera' }"
+					@click="openCoachDetail(coach.value)"
+				>
+					<image class="coach-avatar" :src="coach.avatar" mode="aspectFit" />
+					<text class="coach-name">{{ coach.fullName }}</text>
+				</view>
+			</view>
+		</scroll-view>
+
+		<CoachDetailModal
+			v-if="showCoachModal"
+			:visible="showCoachModal"
+			:coachData="currentCoach"
+			@close="closeCoachModal"
+			@select="handleCoachSelect"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import FilterPill from '@/components/ui-box/filter-pill.uvue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal.uvue'
+import { CoachData, getAllCoaches, getCoachByValue, getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.uts'
+
+type FilterOption = {
+	label: string
+	value: string
+}
+
+const props = defineProps<{
+	genderValues: string[]
+	goalValues: string[]
+	levelValues: string[]
+	partValues: string[]
+	methodValues: string[]
+	durationValues: string[]
+	equipmentValues: string[]
+	coachValues: string[]
+	hasPendingChanges: boolean
+	hasAppliedFilters: boolean
+	filterCount: number
+}>()
+const emit = defineEmits(['changeFilter', 'selectCoach', 'applyFilters', 'goActionLibrary', 'openAiRecommend'])
+
+const expandedGender = ref(false)
+const expandedGoal = ref(false)
+const expandedLevel = ref(false)
+const expandedPart = ref(false)
+const expandedMethod = ref(false)
+const expandedDuration = ref(false)
+const expandedEquipment = ref(false)
+const expandedCoach = ref(false)
+const showCoachModal = ref(false)
+const currentCoach = ref<CoachData>(getSelectedCoach())
+
+const genderOptions: FilterOption[] = [{ label: '女', value: 'female' }, { label: '男', value: 'male' }, { label: '不限', value: 'all' }]
+const goalOptions: FilterOption[] = [{ label: '减脂塑形', value: 'fat-loss' }, { label: '增肌增力', value: 'muscle' }, { label: '全面健康', value: 'health' }, { label: '健康养生', value: 'wellness' }, { label: '青少年适能', value: 'youth' }]
+const levelOptions: FilterOption[] = [{ label: '初级', value: 'beginner' }, { label: '中级', value: 'intermediate' }, { label: '高级', value: 'advanced' }]
+const partOptions: FilterOption[] = [{ label: '肩部', value: 'shoulder' }, { label: '手臂', value: 'arm' }, { label: '背部', value: 'back' }, { label: '胸部', value: 'chest' }, { label: '腰腹', value: 'core' }, { label: '臀腿', value: 'leg' }, { label: '全身', value: 'full-body' }]
+const methodOptions: FilterOption[] = [{ label: '有力臂', value: 'resistance' }, { label: '无力臂', value: 'no-resistance' }]
+const durationOptions: FilterOption[] = [{ label: '<15分', value: '0-15' }, { label: '15-25分', value: '15-25' }, { label: '25-40分', value: '25-40' }, { label: '>40分', value: '40+' }]
+const equipmentOptions: FilterOption[] = [{ label: '短杆', value: 'short-bar' }, { label: '脚环', value: 'ankle-strap' }, { label: '三角把', value: 'triangle-handle' }, { label: '中杆', value: 'middle-bar' }, { label: '瑜伽垫', value: 'yoga-mat' }, { label: '横杆', value: 'lat-bar' }, { label: '泡沫轴', value: 'foam-roller' }, { label: '弹力带', value: 'resistance-band' }, { label: '双头绳', value: 'dual-rope' }, { label: '健身凳', value: 'fitness-bench' }]
+const coachOptions = getAllCoaches()
+
+function valuesFor(key: string): string[] {
+	if (key == 'gender') return props.genderValues
+	if (key == 'goal') return props.goalValues
+	if (key == 'level') return props.levelValues
+	if (key == 'part') return props.partValues
+	if (key == 'method') return props.methodValues
+	if (key == 'duration') return props.durationValues
+	if (key == 'equipment') return props.equipmentValues
+	return props.coachValues
+}
+
+function hasValue(key: string, value: string): boolean {
+	return valuesFor(key).includes(value)
+}
+
+function changeFilter(key: string, value: string) { emit('changeFilter', key, value) }
+function applyFilters() { emit('applyFilters') }
+function goActionLibrary() { emit('goActionLibrary') }
+function goToAIRecommend() { emit('openAiRecommend') }
+function toggleGender() { expandedGender.value = !expandedGender.value }
+function toggleGoal() { expandedGoal.value = !expandedGoal.value }
+function toggleLevel() { expandedLevel.value = !expandedLevel.value }
+function togglePart() { expandedPart.value = !expandedPart.value }
+function toggleMethod() { expandedMethod.value = !expandedMethod.value }
+function toggleDuration() { expandedDuration.value = !expandedDuration.value }
+function toggleEquipment() { expandedEquipment.value = !expandedEquipment.value }
+function toggleCoach() { expandedCoach.value = !expandedCoach.value }
+function openCoachDetail(coachValue: string) {
+	const coach = getCoachByValue(coachValue)
+	if (coach != null) currentCoach.value = coach
+	showCoachModal.value = true
+}
+function closeCoachModal() { showCoachModal.value = false }
+function handleCoachSelect(coachData: CoachData) {
+	if (!setSelectedCoach(coachData.value)) return
+	currentCoach.value = coachData
+	emit('selectCoach', coachData.value)
+	uni.showToast({ title: '已选择' + coachData.label, icon: 'success', duration: 1500 })
+}
+
+onMounted(() => {
+	const selectedCoach = getSelectedCoach()
+	currentCoach.value = selectedCoach
+})
+</script>
+
+<style>
+.sidebar { width: 200rpx; height: 100%; padding: 8rpx 8rpx 12rpx; border-radius: 16rpx; background-color: rgba(243,244,246,0.95); display: flex; flex-direction: column; overflow: hidden; }
+.ai-header { align-items: center; margin-bottom: 8rpx; flex-shrink: 0; }
+.ai-recommend-btn { width: 100%; height: 56rpx; padding: 0 8rpx; border-radius: 28rpx; background-color: #65b1fe; flex-direction: row; align-items: center; justify-content: center; }
+.ai-avatar { width: 40rpx; height: 40rpx; margin-right: 6rpx; }
+.ai-text { font-size: 18rpx; color: #000000; font-weight: 700; letter-spacing: 1rpx; }
+.filter-list { flex: 1; min-height: 0; overflow: hidden; }
+.filter-title { height: 42rpx; margin-bottom: 4rpx; padding: 0 10rpx; border-radius: 10rpx; background-color: rgba(200,200,200,0.3); flex-direction: row; align-items: center; justify-content: space-between; border-width: 1rpx; border-style: solid; border-color: transparent; }
+.filter-title.pending { background-color: #B7EF4A; border-color: #B7EF4A; box-shadow: 0 6rpx 16rpx rgba(183,239,74,0.32); }
+.filter-title.applied { background-color: rgba(183,239,74,0.18); border-color: rgba(128,183,27,0.28); }
+.filter-title-text { font-size: 18rpx; color: #666666; font-weight: 600; }
+.filter-title.pending .filter-title-text { color: #ffffff; }
+.filter-title.applied .filter-title-text { color: #6F8F17; }
+.filter-count-badge { margin-left: 6rpx; min-width: 28rpx; height: 28rpx; padding: 0 8rpx; border-radius: 14rpx; background-color: rgba(255,255,255,0.82); align-items: center; justify-content: center; }
+.filter-count-text { font-size: 16rpx; color: #6F8F17; font-weight: 700; }
+.library-switch { margin-bottom: 4rpx; padding: 2rpx 0; align-items: center; }
+.library-switch-btn { width: 132rpx; height: 34rpx; margin-bottom: 4rpx; border-radius: 10rpx; background-color: rgba(255,255,255,0.85); border-width: 1rpx; border-style: solid; border-color: rgba(200,200,200,0.5); align-items: center; justify-content: center; }
+.library-switch-btn.active { background-color: #B7EF4A; border-color: #B7EF4A; }
+.library-switch-text { font-size: 16rpx; color: #999999; font-weight: 600; }
+.library-switch-text.active { color: #ffffff; }
+.filter-options { display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 4rpx; }
+.option-chip { height: 28rpx; margin-right: 4rpx; margin-bottom: 4rpx; padding: 0 6rpx; border-radius: 14rpx; background-color: rgba(255,255,255,0.8); border-width: 1rpx; border-style: solid; border-color: rgba(200,200,200,0.5); align-items: center; justify-content: center; }
+.option-chip.active { background-color: #00C853; border-color: #00C853; }
+.option-text { font-size: 14rpx; color: #333333; }
+.option-chip.active .option-text { color: #ffffff; font-weight: 600; }
+.coach-options { display: flex; flex-direction: column; align-items: center; margin-bottom: 4rpx; }
+.coach-card { width: 132rpx; height: 44rpx; margin-bottom: 4rpx; padding: 4rpx 6rpx; border-radius: 10rpx; background-color: rgba(255,255,255,0.92); display: flex; flex-direction: row; align-items: center; border-width: 2rpx; border-style: solid; border-color: transparent; }
+.coach-card.vince { background-color: #65b1fe; }
+.coach-card.vera { background-color: #FFC5DC; }
+.coach-card.active { border-color: #00C853; box-shadow: 0 2rpx 8rpx rgba(0,200,83,0.3); }
+.coach-avatar { width: 32rpx; height: 32rpx; margin-right: 4rpx; }
+.coach-name { flex: 1; font-size: 14rpx; font-weight: 700; color: #333333; }
+</style>

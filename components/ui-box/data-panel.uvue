@@ -1,0 +1,60 @@
+<template>
+	<view class="data-panel">
+		<view v-if="panelIcon.length > 0" class="panel-icon-wrap">
+			<image class="panel-icon" :src="panelIcon" mode="aspectFit" />
+		</view>
+		<view class="panel-content">
+			<text class="panel-label" :style="{ color: panelLabelColor }">{{ label }}</text>
+			<view class="panel-value-row">
+				<text class="panel-value" :style="{ color: panelValueColor }">{{ formattedValue }}</text>
+				<text v-if="panelUnit.length > 0" class="panel-unit" :style="{ color: panelUnitColor }">{{ panelUnit }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const props = defineProps<{
+	icon?: string
+	label: string
+	value: string | number
+	unit?: string
+	decimals?: number
+	labelColor?: string
+	valueColor?: string
+	unitColor?: string
+}>()
+
+const panelIcon = computed<string>(() => props.icon == null ? '' : props.icon)
+const panelUnit = computed<string>(() => props.unit == null ? '' : props.unit)
+const panelDecimals = computed<number>(() => props.decimals == null ? 0 : props.decimals)
+const panelLabelColor = computed<string>(() => props.labelColor == null ? '#666666' : props.labelColor)
+const panelValueColor = computed<string>(() => props.valueColor == null ? '#333333' : props.valueColor)
+const panelUnitColor = computed<string>(() => props.unitColor == null ? '#666666' : props.unitColor)
+
+const formattedValue = computed<string>(() => {
+	if (typeof props.value == 'number' && panelDecimals.value > 0) {
+		return props.value.toFixed(panelDecimals.value)
+	}
+	return `${props.value}`
+})
+</script>
+
+<style>
+.data-panel {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 10rpx 14rpx;
+	border-radius: 16rpx;
+	background-color: rgba(255, 255, 255, 0.62);
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+}
+.panel-icon-wrap { width: 48rpx; height: 48rpx; display: flex; align-items: center; justify-content: center; }
+.panel-icon { width: 40rpx; height: 40rpx; }
+.panel-content { flex: 1; display: flex; flex-direction: column; margin-left: 8rpx; }
+.panel-label { font-size: 20rpx; }
+.panel-value-row { display: flex; flex-direction: row; align-items: flex-end; }
+.panel-value { font-size: 28rpx; font-weight: 700; }
+.panel-unit { margin-left: 4rpx; font-size: 20rpx; }
+</style>

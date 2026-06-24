@@ -1,0 +1,470 @@
+/**
+ * wzl-serialbridge Android 平台实现
+ * 基于 Kotlin SerialPort AAR 封装
+ */
+
+// 探针函数 - 用于验证导出机制
+export function __probe(): number {
+  return 42
+}
+
+// 导入接口定义(仅用于类型约束)
+import {
+  OpenOptions,
+  OpenResult,
+  WriteOptions,
+  WriteResult,
+  ReadOptions,
+  ReadResult,
+  CloseOptions,
+  CloseResult,
+  ListDevicesOptions,
+  ListDevicesResult
+} from '../../interface.uts'
+
+// 导入错误类
+import { SerialErrorImpl } from '../../unierror.uts'
+
+// 导入 Kotlin AAR 中的类 - 使用全限定类名 + 默认导入
+import SerialPort from 'com.example.serialbridge.SerialPort'
+import SerialConfig from 'com.example.serialbridge.SerialConfig'
+import DataBits from 'com.example.serialbridge.DataBits'
+import StopBits from 'com.example.serialbridge.StopBits'
+import Parity from 'com.example.serialbridge.Parity'
+import File from 'java.io.File'
+import IOException from 'java.io.IOException'
+import Base64 from 'android.util.Base64'
+
+// ==================== 全局状态管理 ====================
+
+/**
+ * 串口实例池，key 为句柄 ID
+ */
+const serialPorts: Map<Int, SerialPort> = new Map()
+
+/**
+ * 句柄 ID 计数器
+ */
+let portIdCounter: Int = 1
+
+/**
+ * 生成新的串口句柄 ID
+ */
+function generatePortId(): Int {
+  return portIdCounter++
+}
+
+// ==================== 工具函数 ====================
+
+/**
+ * 解析校验位字符串为枚举
+ */
+function parseParity(parity: string): Parity {
+  switch (parity.toLowerCase()) {
+    case 'odd':
+      return Parity.ODD
+    case 'even':
+      return Parity.EVEN
+    default:
+      return Parity.NONE
+  }
+}
+
+/**
+ * HEX 字符串转字节数组
+ */
+function hexToBytes(hex: string): ByteArray {
+  const cleanHex = hex.replace(/\s+/g, '').replace(/^0x/i, '')
+  const len: Int = cleanHex.length.toInt()
+  const bytes = new ByteArray((len / 2).toInt())
+  
+  for (let i = 0; i < len; i += 2) {
+    const start: Int = i.toInt()
+    const end: Int = (i + 2).toInt()
+    const byte = parseInt(cleanHex.substring(start, end), 16)
+    bytes[(i / 2).toInt()] = byte.toByte()
+  }
+  
+  return bytes
+}
+
+/**
+ * 字节数组转 HEX 字符串
+ */
+function bytesToHex(bytes: ByteArray, length: number): string {
+  const hexChars = "0123456789ABCDEF"
+  const n: Int = length.toInt()
+  let result = ""
+  
+  for (let i = 0; i < n; i++) {
+    const idx: Int = i.toInt()
+    const v = (bytes[idx].toInt() & 0xFF)
+    result += hexChars[(v >> 4)]
+    result += hexChars[(v & 0x0F)]
+  }
+  
+  return result
+}
+
+/**
+ * Base64 字符串转字节数组
+ */
+function base64ToBytes(base64: string): ByteArray {
+  return Base64.decode(base64, Base64.DEFAULT)
+}
+
+/**
+ * 字节数组转 Base64 字符串
+ */
+function bytesToBase64(bytes: ByteArray, length: number): string {
+  const trimmedBytes = bytes.copyOf(length.toInt())
+  return Base64.encodeToString(trimmedBytes, Base64.DEFAULT)
+}
+
+// ==================== API 实现 ====================
+
+/**
+ * 打开串口
+ */
+export function openSerial(options: OpenOptions) {
+  try {
+    // 参数校验
+    if (options.path == null || options.path.length == 0) {
+      const err = new SerialErrorImpl(10006)
+      err.errMsg = "设备路径不能为空"
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 构建配置对象
+    const config = options.config ?? {}
+    const baudRate = config.baudRate ?? 115200
+    const dataBitsValue = config.dataBits ?? 8
+    const stopBitsValue = config.stopBits ?? 1
+    const parityValue = config.parity ?? 'none'
+
+    // 转换为 Kotlin 枚举
+    let dataBits: DataBits
+    if (dataBitsValue == 5) {
+      dataBits = DataBits.DATA_BITS_5
+    } else if (dataBitsValue == 6) {
+      dataBits = DataBits.DATA_BITS_6
+    } else if (dataBitsValue == 7) {
+      dataBits = DataBits.DATA_BITS_7
+    } else {
+      dataBits = DataBits.DATA_BITS_8
+    }
+
+    let stopBits: StopBits
+    if (stopBitsValue == 2) {
+      stopBits = StopBits.STOP_BITS_2
+    } else {
+      stopBits = StopBits.STOP_BITS_1
+    }
+
+    const parity = parseParity(parityValue)
+
+    // 创建配置对象 - 将 Number 转为 Int
+    const serialConfig = SerialConfig(baudRate.toInt(), dataBits, stopBits, parity)
+
+    // 打开串口
+    const serialPort = SerialPort(options.path, serialConfig)
+
+    // 生成句柄 ID 并保存
+    const portId = generatePortId()
+    serialPorts.set(portId, serialPort)
+
+    // 返回成功结果
+    const res: OpenResult = {
+      errMsg: "openSerial:ok",
+      portId: portId
+    }
+    options.success?.(res)
+    options.complete?.(res)
+
+  } catch (e: Exception) {
+    const err = new SerialErrorImpl(10001)
+    err.errMsg = "打开串口失败: " + e.message
+    options.fail?.(err)
+    options.complete?.(err)
+  }
+}
+
+/**
+ * 写入数据
+ */
+export function writeSerial(options: WriteOptions) {
+  try {
+    // 获取串口实例
+    const serialPort = serialPorts.get(options.portId.toInt())
+    if (serialPort == null) {
+      const err = new SerialErrorImpl(10005)
+      err.errMsg = "串口未打开，请先调用 openSerial"
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 数据格式转换
+    const format = options.format ?? 'hex'
+    let dataBytes: ByteArray
+
+    if (format == 'hex') {
+      dataBytes = hexToBytes(options.data)
+    } else if (format == 'base64') {
+      dataBytes = base64ToBytes(options.data)
+    } else {
+      const err = new SerialErrorImpl(10007)
+      err.errMsg = "不支持的数据格式: " + format
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 写入数据
+    const timeout = options.timeout ?? 1000
+    const bytesWritten = serialPort.write(dataBytes, timeout.toInt())
+
+    // 返回成功结果
+    const res: WriteResult = {
+      errMsg: "writeSerial:ok",
+      bytesWritten: bytesWritten
+    }
+    options.success?.(res)
+    options.complete?.(res)
+
+  } catch (e: Exception) {
+    const err = new SerialErrorImpl(10002)
+    err.errMsg = "写入数据失败: " + e.message
+    options.fail?.(err)
+    options.complete?.(err)
+  }
+}
+
+/**
+ * 读取数据
+ */
+export function readSerial(options: ReadOptions) {
+  try {
+    // 获取串口实例
+    const serialPort = serialPorts.get(options.portId.toInt())
+    if (serialPort == null) {
+      const err = new SerialErrorImpl(10005)
+      err.errMsg = "串口未打开，请先调用 openSerial"
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 读取数据
+    const length = options.length ?? 1024
+    const timeout = options.timeout ?? 1000
+    const buffer = new ByteArray(length.toInt())
+    const bytesRead = serialPort.read(buffer, timeout.toInt())
+
+    // 数据格式转换
+    const format = options.format ?? 'hex'
+    let dataStr: string
+
+    if (format == 'hex') {
+      dataStr = bytesToHex(buffer, bytesRead)
+    } else if (format == 'base64') {
+      dataStr = bytesToBase64(buffer, bytesRead)
+    } else {
+      const err = new SerialErrorImpl(10007)
+      err.errMsg = "不支持的数据格式: " + format
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 返回成功结果
+    const res: ReadResult = {
+      errMsg: "readSerial:ok",
+      data: dataStr,
+      bytesRead: bytesRead
+    }
+    options.success?.(res)
+    options.complete?.(res)
+
+  } catch (e: Exception) {
+    const err = new SerialErrorImpl(10003)
+    err.errMsg = "读取数据失败: " + e.message
+    options.fail?.(err)
+    options.complete?.(err)
+  }
+}
+
+/**
+ * 关闭串口
+ */
+export function closeSerial(options: CloseOptions) {
+  try {
+    // 获取串口实例
+    const serialPort = serialPorts.get(options.portId.toInt())
+    if (serialPort == null) {
+      const err = new SerialErrorImpl(10005)
+      err.errMsg = "串口未打开"
+      options.fail?.(err)
+      options.complete?.(err)
+      return
+    }
+
+    // 关闭串口
+    serialPort.close()
+
+    // 从池中移除
+    serialPorts.delete(options.portId.toInt())
+
+    // 返回成功结果
+    const res: CloseResult = {
+      errMsg: "closeSerial:ok"
+    }
+    options.success?.(res)
+    options.complete?.(res)
+
+  } catch (e: Exception) {
+    const err = new SerialErrorImpl(10004)
+    err.errMsg = "关闭串口失败: " + e.message
+    options.fail?.(err)
+    options.complete?.(err)
+  }
+}
+
+/**
+ * 列举可用设备
+ */
+export function listDevices(options?: ListDevicesOptions) {
+  try {
+    const prefixes = options?.prefixes ?? ["/dev/ttyS", "/dev/ttyUSB", "/dev/ttyAMA"]
+    const devices: string[] = []
+
+    const devDir = File("/dev")
+    if (devDir.exists() && devDir.isDirectory()) {
+      const files = devDir.listFiles()
+      if (files != null) {
+        const n: Int = files.size
+        for (let i = 0; i < n; i++) {
+          const idx: Int = i.toInt()
+          const file = files[idx]
+          const path = file.getAbsolutePath()
+          for (prefix in prefixes) {
+            if (path.startsWith(prefix)) {
+              devices.push(path)
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // 返回成功结果
+    const res: ListDevicesResult = {
+      errMsg: "listDevices:ok",
+      devices: devices
+    }
+    options?.success?.(res)
+    options?.complete?.(res)
+
+  } catch (e: Exception) {
+    const err = new SerialErrorImpl(10006)
+    err.errMsg = "列举设备失败: " + e.message
+    options?.fail?.(err)
+    options?.complete?.(err)
+  }
+}
+
+/**
+ * 获取插件版本
+ */
+export function getVersion(): string {
+  return "1.0.0"
+}
+
+export function listDevicesBridge(prefixes: string[], success: (devices: string[]) => void, fail: (errMsg: string) => void) {
+  listDevices({
+    prefixes,
+    success: (res) => {
+      success(res.devices)
+    },
+    fail: (err) => {
+      fail(err.errMsg)
+    }
+  })
+}
+
+export function openSerialBridge(path: string, baudRate: number, success: (portId: number) => void, fail: (errMsg: string) => void) {
+  openSerial({
+    path,
+    config: {
+      baudRate,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none'
+    },
+    success: (res) => {
+      success(res.portId)
+    },
+    fail: (err) => {
+      fail(err.errMsg)
+    }
+  })
+}
+
+export function closeSerialBridge(portId: number, success: () => void, fail: (errMsg: string) => void, complete: () => void) {
+  closeSerial({
+    portId,
+    success: () => {
+      success()
+    },
+    fail: (err) => {
+      fail(err.errMsg)
+    },
+    complete: () => {
+      complete()
+    }
+  })
+}
+
+export function readSerialBridge(
+  portId: number,
+  length: number,
+  timeout: number,
+  success: (data: string, bytesRead: number) => void,
+  fail: (errCode: number, errMsg: string) => void
+) {
+  readSerial({
+    portId,
+    length,
+    format: 'hex',
+    timeout,
+    success: (res) => {
+      success(res.data, res.bytesRead)
+    },
+    fail: (err) => {
+      fail(err.errCode, err.errMsg)
+    }
+  })
+}
+
+export function writeSerialBridge(
+  portId: number,
+  data: string,
+  timeout: number,
+  success: () => void,
+  fail: (errMsg: string) => void
+) {
+  writeSerial({
+    portId,
+    data,
+    format: 'hex',
+    timeout,
+    success: () => {
+      success()
+    },
+    fail: (err) => {
+      fail(err.errMsg)
+    }
+  })
+}

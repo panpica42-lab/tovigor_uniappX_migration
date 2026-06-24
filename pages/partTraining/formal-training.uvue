@@ -1,0 +1,520 @@
+<template>
+	<view class="formal-training-page" :style="{ width: screenWidthText, height: screenHeightText }">
+		<image
+			v-if="!showBackgroundVideo"
+			class="background-poster"
+			:style="{ width: screenWidthText, height: screenHeightText }"
+			:src="backgroundPosterSrc"
+			mode="aspectFill"
+		/>
+		<video
+			v-if="showBackgroundVideo"
+			id="formalTrainingBackgroundVideo"
+			class="background-video"
+			:style="{ width: screenWidthText, height: screenHeightText }"
+			:src="backgroundVideoSrc"
+			loop
+			muted
+			autoplay
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@loadedmetadata="onBackgroundVideoLoaded"
+			@ended="onBackgroundVideoEnded"
+			@error="handleVideoError"
+		></video>
+		<view class="background-tap-layer" :style="{ width: screenWidthText }" @click="showControlPanel"></view>
+
+		<view v-if="panelVisible" class="control-panel-overlay" :style="{ width: screenWidthText, height: screenHeightText }">
+			<view class="control-panel-mask" :style="{ width: screenWidthText, height: screenHeightText }"></view>
+			<view class="control-buttons">
+				<view class="control-btn control-btn-side" @click="prevStage">
+					<image class="control-icon" src="/static/icons/general/btn_last_step.svg" mode="aspectFit" />
+					<text class="control-btn-text">练前热身</text>
+				</view>
+
+				<view class="control-btn control-btn-center" @click="hideControlPanel">
+					<image class="control-icon" src="/static/icons/general/btn_playing_white.svg" mode="aspectFit" />
+				</view>
+
+				<view class="control-btn control-btn-side" @click="nextStage">
+					<image class="control-icon" src="/static/icons/general/btn_next_step.svg" mode="aspectFit" />
+					<text class="control-btn-text">练后拉伸</text>
+				</view>
+			</view>
+
+			<view class="exit-btn" @click="exitTraining">
+				<text class="exit-btn-text">退出训练</text>
+			</view>
+		</view>
+
+		<CommonBackButton class="back-btn-position" :useDefault="false" @click="goBack" />
+
+		<view class="header-title">
+			<text class="title-text">{{ currentExerciseName }}</text>
+		</view>
+
+		<view class="progress-section">
+			<StepBar :totalSteps="totalSteps" :currentStep="currentStep" />
+		</view>
+
+		<view class="top-status-section">
+			<view class="coach-dialog-section">
+				<CoachBoxEntry
+					:text="coachBubbleText"
+					:coachData="selectedCoach"
+					bubble-width="400rpx"
+					@modal-open="handleCoachModalOpen"
+					@modal-close="handleCoachModalClose"
+					@coach-changed="handleCoachChanged"
+				/>
+			</view>
+			<view class="coach-hit-layer" @tap="openCoachModal" @click="openCoachModal"></view>
+
+			<view v-if="showDeferredTrainingUi" class="data-panels">
+				<view class="data-panel-item">
+					<DataPanel icon="/static/icons/freeTrainingActivity/ic_counts.png" label="组数/次数" :value="setText" />
+				</view>
+				<view class="data-panel-item">
+					<DataPanel icon="/static/icons/freeTrainingActivity/ic_calories.png" label="热量/千卡" :value="caloriesText" />
+				</view>
+			</view>
+		</view>
+
+		<view v-if="showDeferredTrainingUi" class="virtual-character-container">
+			<image class="close-btn-svg" src="/static/icons/general/btn_general_close.svg" mode="aspectFit" @click="closeVirtualCharacter" />
+			<text class="virtual-title">虚拟形象模拟</text>
+			<image class="virtual-character-image" src="/static/icons/partTrainingActivity/startTraining/virtual-character.png" mode="aspectFit" />
+		</view>
+
+		<view v-if="showDeferredTrainingUi" class="strength-label">
+			<image class="strength-icon" src="/static/icons/partTrainingActivity/startTraining/icon-strength.svg" mode="aspectFit" />
+			<text class="strength-text">力量</text>
+		</view>
+
+		<view v-if="showDeferredTrainingUi" class="heart-rate-section">
+			<view class="heart-rate-panel">
+				<DataPanel icon="/static/icons/partTrainingActivity/startTraining/ic_heart.png" label="心率" :value="heartRate" unit="次/分钟" valueColor="#E53935" labelColor="#E53935" unitColor="#E53935" />
+			</view>
+			<view class="heart-rate-curve">
+				<image class="curve-image" src="/static/icons/partTrainingActivity/startTraining/heart-rate-curve.png" mode="widthFix" />
+			</view>
+		</view>
+
+		<view v-if="showDeferredTrainingUi" class="distance-chart">
+			<ForceRealtimeBars :values="historyDistances" :live-value="liveDistance" :max-value="80" :slot-count="8" />
+		</view>
+
+		<view class="strength-control-section">
+			<view class="control-header">
+				<view class="weight-label">
+					<view class="weight-badge">
+						<text class="weight-badge-text">KG</text>
+					</view>
+					<text class="weight-text">配重</text>
+				</view>
+				<text class="weight-value">{{ displayWeightText }}KG</text>
+			</view>
+
+			<view class="switch-btn" :class="{ 'switch-on': powerOn, 'switch-off': !powerOn }" @click="togglePower">
+				<image class="switch-icon" :src="powerOn ? '/static/icons/partTrainingActivity/startTraining/ic_switch_on.svg' : '/static/icons/partTrainingActivity/startTraining/ic_switch_off.svg'" mode="aspectFit" />
+			</view>
+
+			<view class="slider-row" :class="{ 'slider-disabled': !powerOn }">
+				<view class="adjust-btn minus-btn" :class="{ 'btn-disabled': !powerOn || isAtMinLimit }" @click="decreaseWeight">
+					<text class="adjust-btn-text">-</text>
+				</view>
+
+				<view class="power-slider-container">
+					<slider class="power-slider" :min="sliderMin" :max="sliderMax" :value="weight" :disabled="!powerOn" @changing="onSliderChanging" @change="onSliderChange" />
+				</view>
+
+				<view class="adjust-btn plus-btn" :class="{ 'btn-disabled': !powerOn || isAtMaxLimit }" @click="increaseWeight">
+					<text class="adjust-btn-text">+</text>
+				</view>
+			</view>
+		</view>
+		<CoachDetailModal
+			v-if="coachModalVisible"
+			:visible="coachModalVisible"
+			:coachData="selectedCoach"
+			@close="closeCoachModal"
+			@select="selectCoach"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import StepBar from '@/components/ui-box/step-bar.uvue'
+import DataPanel from '@/components/ui-box/data-panel.uvue'
+import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal.uvue'
+import ForceRealtimeBars from '@/components/training/force-realtime-bars.uvue'
+import { FORCE_MODE, RuntimeStatus, SerialFrame, getStatus, onFrame, offFrame, onStatus, offStatus, startWorking, stopForce, updateWorkingForce } from '@/utils/serialRuntime.uts'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.uts'
+import { CoachData, getSelectedCoach, getCoachByValue, setSelectedCoach } from '@/utils/coachManager.uts'
+
+const backgroundVideoSrc = '/static/icons/general/video-placeholder-2.mp4'
+const backgroundPosterSrc = '/static/icons/general/video-placeholder-2-poster.jpg'
+const currentExerciseName = ref('站姿肩关节环绕')
+const totalSteps = 12
+const currentStep = 8
+const sliderMin = 5
+const sliderMax = 55
+
+const screenWidth = ref(750)
+const screenHeight = ref(0)
+const panelVisible = ref(false)
+const coachModalVisible = ref(false)
+const showBackgroundVideo = ref(false)
+const showDeferredTrainingUi = ref(false)
+const powerOn = ref(false)
+const weight = ref(30)
+const dragDisplayValue = ref(30)
+const isDraggingSlider = ref(false)
+const runtimeStatus = ref<RuntimeStatus>(getStatus())
+const selectedCoach = ref<CoachData>(getSelectedCoach())
+const currentSet = ref(0)
+const currentRep = ref(0)
+const calories = ref(0)
+const heartRate = ref(33)
+const historyDistances = ref<number[]>([])
+const liveDistance = ref(0)
+let lastSportCount = -1
+let countBaseline = 0
+let needCaptureBaseline = false
+let videoRetryTimer = 0
+let deferredUiTimer = 0
+let canPlayBackgroundVideo = false
+let pendingBackgroundVideoPlay = false
+let allowBackgroundVideoPlayback = false
+
+function pad2(value: number): string { return value < 10 ? '0' + value.toString() : value.toString() }
+
+const screenWidthText = computed<string>(() => screenWidth.value.toString() + 'px')
+const screenHeightText = computed<string>(() => screenHeight.value > 0 ? screenHeight.value.toString() + 'px' : '100%')
+const displayWeight = computed<number>(() => isDraggingSlider.value ? dragDisplayValue.value : weight.value)
+const displayWeightText = computed<string>(() => displayWeight.value.toString())
+const isAtMinLimit = computed<boolean>(() => weight.value <= sliderMin)
+const isAtMaxLimit = computed<boolean>(() => weight.value >= sliderMax)
+const setText = computed<string>(() => pad2(currentSet.value) + '/' + pad2(currentRep.value))
+const caloriesText = computed<string>(() => (calories.value / 1000).toFixed(2))
+const coachBubbleText = computed<string>(() => {
+	if (!powerOn.value) {
+		return '准备完成后开启力量，先用能稳定控制的配重开始。'
+	}
+	if (isDraggingSlider.value) {
+		return '保持动作节奏稳定，松手后会按当前配重继续训练。'
+	}
+	return '保持肩部稳定，匀速发力，当前配重 ' + displayWeightText.value + ' KG。'
+})
+
+function updateScreenSize() {
+	const systemInfo = uni.getSystemInfoSync()
+	screenWidth.value = systemInfo.windowWidth
+	screenHeight.value = systemInfo.windowHeight
+}
+
+function clearVideoRetryTimer() {
+	if (videoRetryTimer != 0) {
+		clearTimeout(videoRetryTimer)
+		videoRetryTimer = 0
+	}
+}
+
+function clearDeferredUiTimer() {
+	if (deferredUiTimer != 0) {
+		clearTimeout(deferredUiTimer)
+		deferredUiTimer = 0
+	}
+}
+
+function scheduleDeferredTrainingUi() {
+	clearDeferredUiTimer()
+	deferredUiTimer = setTimeout(() => {
+		deferredUiTimer = 0
+		showDeferredTrainingUi.value = true
+	}, 120)
+}
+
+function getBackgroundVideoContext() {
+	return uni.createVideoContext('formalTrainingBackgroundVideo')
+}
+
+function playBackgroundVideo() {
+	if (!allowBackgroundVideoPlayback) return
+	const videoContext = getBackgroundVideoContext()
+	if (videoContext != null) {
+		pendingBackgroundVideoPlay = false
+		videoContext.play()
+	} else {
+		pendingBackgroundVideoPlay = true
+		console.log('[TrainingVideo] formal video context not found')
+	}
+}
+
+function scheduleBackgroundVideoPlay(delay: number = 300) {
+	clearVideoRetryTimer()
+	videoRetryTimer = setTimeout(() => {
+		videoRetryTimer = 0
+		showBackgroundVideo.value = true
+		setTimeout(() => {
+			canPlayBackgroundVideo = true
+			playBackgroundVideo()
+		}, 80)
+	}, delay)
+}
+
+function pauseBackgroundVideo() {
+	clearVideoRetryTimer()
+	const videoContext = getBackgroundVideoContext()
+	if (videoContext != null) {
+		videoContext.pause()
+	}
+}
+
+function onBackgroundVideoLoaded() {
+	canPlayBackgroundVideo = true
+	if (pendingBackgroundVideoPlay || allowBackgroundVideoPlayback) {
+		playBackgroundVideo()
+	}
+}
+
+function onBackgroundVideoEnded() {
+	const videoContext = getBackgroundVideoContext()
+	if (videoContext != null && allowBackgroundVideoPlayback) {
+		videoContext.seek(0)
+		videoContext.play()
+	}
+}
+
+function stopPowerOutput() {
+	if (!powerOn.value) return
+	powerOn.value = false
+	isDraggingSlider.value = false
+	stopForce(800, 200)
+}
+
+function prepareLeavePage() {
+	allowBackgroundVideoPlayback = false
+	pendingBackgroundVideoPlay = false
+	pauseBackgroundVideo()
+	stopPowerOutput()
+}
+
+function togglePower() {
+	if (powerOn.value) {
+		stopPowerOutput()
+		return
+	}
+	if (!runtimeStatus.value.connected) {
+		uni.showToast({ title: '设备连接中，暂未连接', icon: 'none' })
+		return
+	}
+	powerOn.value = true
+	currentSet.value += 1
+	needCaptureBaseline = true
+	lastSportCount = -1
+	startWorking(weight.value, FORCE_MODE.CONST, 200)
+}
+
+function readSliderValue(event: UniSliderChangeEvent): number {
+	return parseInt(`${event.detail.value}`, 10)
+}
+
+function onSliderChanging(event: UniSliderChangeEvent) {
+	isDraggingSlider.value = true
+	dragDisplayValue.value = readSliderValue(event)
+}
+
+function onSliderChange(event: UniSliderChangeEvent) {
+	const value = readSliderValue(event)
+	weight.value = value
+	dragDisplayValue.value = value
+	isDraggingSlider.value = false
+	if (powerOn.value) updateWorkingForce(weight.value, FORCE_MODE.CONST)
+}
+
+function increaseWeight() {
+	if (!powerOn.value || weight.value >= sliderMax) return
+	weight.value = Math.min(sliderMax, weight.value + 1)
+	dragDisplayValue.value = weight.value
+	isDraggingSlider.value = false
+	updateWorkingForce(weight.value, FORCE_MODE.CONST)
+}
+
+function decreaseWeight() {
+	if (!powerOn.value || weight.value <= sliderMin) return
+	weight.value = Math.max(sliderMin, weight.value - 1)
+	dragDisplayValue.value = weight.value
+	isDraggingSlider.value = false
+	updateWorkingForce(weight.value, FORCE_MODE.CONST)
+}
+
+function toDistanceCm(distance: number): number { return Math.max(0, distance) / 10 }
+
+function handleFrame(frame: SerialFrame) {
+	if (needCaptureBaseline) {
+		countBaseline = frame.sportCount
+		needCaptureBaseline = false
+	}
+	currentRep.value = Math.max(0, frame.sportCount - countBaseline)
+	calories.value = frame.calories
+	const currentDistance = Math.max(toDistanceCm(frame.left.distance), toDistanceCm(frame.right.distance))
+	if (currentDistance >= 4) liveDistance.value = Math.max(liveDistance.value, currentDistance)
+	if (lastSportCount < 0) lastSportCount = frame.sportCount
+	if (frame.sportCount > lastSportCount) {
+		if (liveDistance.value > 0) historyDistances.value = [...historyDistances.value, liveDistance.value]
+		liveDistance.value = 0
+		lastSportCount = frame.sportCount
+	}
+}
+
+function handleStatus(status: RuntimeStatus) { runtimeStatus.value = status }
+function handleCoachModalOpen() { coachModalVisible.value = true }
+function handleCoachModalClose() { coachModalVisible.value = false }
+function handleCoachChanged(coachData: CoachData) { selectedCoach.value = coachData }
+function openCoachModal() {
+	console.log('[TrainingCoach] formal open coach modal')
+	selectedCoach.value = getSelectedCoach()
+	handleCoachModalOpen()
+}
+function closeCoachModal() { handleCoachModalClose() }
+function selectCoach(coachData: CoachData) {
+	if (!setSelectedCoach(coachData.value)) return
+	const savedCoach = getCoachByValue(coachData.value)
+	if (savedCoach != null) selectedCoach.value = savedCoach
+}
+function showControlPanel() { panelVisible.value = true; pauseBackgroundVideo() }
+function hideControlPanel() { panelVisible.value = false; playBackgroundVideo() }
+
+function prevStage() {
+	panelVisible.value = false
+	prepareLeavePage()
+	navigateBackToRoute('/pages/partTraining/warm-up-page', '/pages/partTraining/part-training')
+}
+
+function nextStage() {
+	panelVisible.value = false
+	prepareLeavePage()
+	uni.navigateTo({ url: '/pages/partTraining/cool-down-page' })
+}
+
+function exitTraining() {
+	panelVisible.value = false
+	prepareLeavePage()
+	navigateBackToRoute('/pages/partTraining/part-training')
+}
+
+function goBack() {
+	prepareLeavePage()
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
+}
+
+function closeVirtualCharacter() {
+	uni.showToast({ title: '功能开发中', icon: 'none' })
+}
+
+function handleVideoError(event: UniVideoErrorEvent) {
+	console.log('[TrainingVideo] formal video error: ' + JSON.stringify(event.detail))
+}
+
+onShow(() => {
+	allowBackgroundVideoPlayback = true
+	if (canPlayBackgroundVideo) {
+		playBackgroundVideo()
+	} else {
+		pendingBackgroundVideoPlay = true
+		scheduleBackgroundVideoPlay(300)
+	}
+})
+
+onHide(() => {
+	allowBackgroundVideoPlayback = false
+	pendingBackgroundVideoPlay = false
+	pauseBackgroundVideo()
+	stopPowerOutput()
+})
+
+onLoad(() => {
+	updateScreenSize()
+})
+
+onReady(() => {
+	scheduleDeferredTrainingUi()
+	scheduleBackgroundVideoPlay(80)
+})
+
+onMounted(() => {
+	updateScreenSize()
+	runtimeStatus.value = getStatus()
+	onFrame(handleFrame)
+	onStatus(handleStatus)
+})
+
+onBeforeUnmount(() => {
+	clearDeferredUiTimer()
+	offFrame(handleFrame)
+	offStatus(handleStatus)
+	prepareLeavePage()
+})
+</script>
+
+<style>
+.formal-training-page { position: relative; background-color: #000000; overflow: hidden; }
+.background-video, .background-poster { position: absolute; left: 0; top: 0; z-index: 0; }
+.background-tap-layer { position: absolute; left: 0; right: 0; top: 320rpx; bottom: 340rpx; z-index: 1; background-color: rgba(0,0,0,0.001); }
+.back-btn-position { position: absolute; left: 24rpx; top: 24rpx; z-index: 100; }
+.header-title { position: absolute; left: 0; right: 0; top: 24rpx; z-index: 90; height: 88rpx; align-items: center; justify-content: center; }
+.title-text { font-size: 36rpx; font-weight: 700; color: #ffffff; }
+.progress-section { position: absolute; left: 24rpx; right: 24rpx; top: 120rpx; z-index: 90; }
+.top-status-section { position: absolute; left: 24rpx; right: 24rpx; top: 156rpx; z-index: 200; display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.coach-dialog-section { flex: 1; padding-right: 20rpx; z-index: 210; }
+.coach-hit-layer { position: absolute; left: 0; top: 0; width: 420rpx; height: 170rpx; z-index: 420; background-color: rgba(0,0,0,0.001); }
+.data-panels { width: 210rpx; z-index: 80; }
+.data-panel-item { margin-bottom: 16rpx; }
+.virtual-character-container { position: absolute; left: 24rpx; bottom: 380rpx; z-index: 70; width: 180rpx; padding: 20rpx; align-items: center; background-color: rgba(255,255,255,0.72); border-width: 2rpx; border-style: solid; border-color: rgba(255,255,255,0.18); border-radius: 16rpx; }
+.close-btn-svg { position: absolute; left: 8rpx; top: 8rpx; z-index: 10; width: 18rpx; height: 18rpx; }
+.virtual-title { margin-bottom: 12rpx; font-size: 18rpx; font-weight: 600; color: #333333; }
+.virtual-character-image { width: 140rpx; height: 140rpx; }
+.strength-label { position: absolute; left: 24rpx; bottom: 320rpx; z-index: 70; display: flex; flex-direction: row; align-items: center; }
+.strength-icon { width: 24rpx; height: 24rpx; margin-right: 8rpx; }
+.strength-text { font-size: 24rpx; font-weight: 500; color: #ffffff; }
+.heart-rate-section { position: absolute; right: 24rpx; bottom: 280rpx; z-index: 70; align-items: flex-end; }
+.heart-rate-panel { margin-bottom: 12rpx; }
+.heart-rate-curve { width: 300rpx; height: 60rpx; overflow: hidden; }
+.curve-image { width: 300rpx; }
+.distance-chart { position: absolute; left: 24rpx; right: 24rpx; bottom: 218rpx; z-index: 70; height: 86rpx; padding: 6rpx 10rpx; border-radius: 16rpx; background-color: rgba(255,255,255,0.78); overflow: hidden; }
+.strength-control-section { position: absolute; left: 24rpx; right: 24rpx; bottom: 24rpx; z-index: 100; height: 172rpx; padding: 12rpx 28rpx 14rpx; background-color: rgba(255,255,255,0.88); border-width: 2rpx; border-style: solid; border-color: rgba(255,255,255,0.18); border-radius: 24rpx; }
+.control-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 0; }
+.weight-label { display: flex; flex-direction: row; align-items: center; }
+.weight-badge { padding: 4rpx 12rpx; margin-right: 8rpx; background-color: #333333; border-radius: 6rpx; }
+.weight-badge-text { font-size: 20rpx; font-weight: 600; color: #ffffff; }
+.weight-text { font-size: 24rpx; font-weight: 500; color: #333333; }
+.weight-value { font-size: 32rpx; font-weight: 700; color: #333333; }
+.switch-btn { width: 62rpx; height: 62rpx; align-self: center; margin-top: -2rpx; margin-bottom: 4rpx; align-items: center; justify-content: center; border-radius: 31rpx; background-color: #ffffff; border-width: 3rpx; border-style: solid; }
+.switch-on { border-color: #4caf50; box-shadow: 0 6rpx 20rpx rgba(76,175,80,0.5); }
+.switch-off { border-color: rgba(0,0,0,0.08); box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.15); }
+.switch-icon { width: 44rpx; height: 44rpx; }
+.slider-row { display: flex; flex-direction: row; align-items: center; }
+.slider-disabled { opacity: 0.6; }
+.power-slider-container { flex: 1; height: 38rpx; margin-left: 16rpx; margin-right: 16rpx; justify-content: center; }
+.power-slider { flex: 1; }
+.adjust-btn { width: 44rpx; height: 44rpx; align-items: center; justify-content: center; border-radius: 22rpx; }
+.minus-btn { background-color: #ff9800; }
+.plus-btn { background-color: #4caf50; }
+.btn-disabled { background-color: #cccccc; opacity: 0.6; }
+.adjust-btn-text { font-size: 32rpx; font-weight: 700; color: #ffffff; line-height: 44rpx; }
+.control-panel-overlay { position: absolute; left: 0; top: 0; z-index: 500; align-items: center; justify-content: center; }
+.control-panel-mask { position: absolute; left: 0; top: 0; z-index: 0; background-color: rgba(0,0,0,0.52); }
+.control-buttons { position: relative; z-index: 2; width: 450rpx; display: flex; flex-direction: row; align-items: flex-start; justify-content: space-between; }
+.control-btn { align-items: center; }
+.control-btn-side, .control-btn-center { width: 130rpx; align-items: center; }
+.control-icon { width: 76rpx; height: 76rpx; }
+.control-btn-text { margin-top: 8rpx; font-size: 22rpx; color: #ffffff; }
+.exit-btn { position: absolute; z-index: 2; bottom: 80rpx; left: 285rpx; width: 180rpx; height: 64rpx; border-radius: 32rpx; background-color: rgba(255,255,255,0.18); border-width: 1rpx; border-style: solid; border-color: rgba(255,255,255,0.36); align-items: center; justify-content: center; }
+.exit-btn-text { font-size: 26rpx; font-weight: 600; color: #ffffff; }
+</style>

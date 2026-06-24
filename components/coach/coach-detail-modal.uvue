@@ -1,0 +1,85 @@
+<template>
+	<view v-if="visible" class="modal-overlay">
+		<view class="modal-mask" @click="close"></view>
+		<view class="modal-card" :class="{ vera: currentCoach.value == 'vera' }">
+			<text class="modal-close" @click="close">×</text>
+			<text class="modal-title">AI教练</text>
+
+			<view class="switch-row">
+				<view
+					v-for="coach in allCoaches"
+					:key="coach.value"
+					class="switch-btn"
+					:class="{ active: coach.value == currentCoach.value }"
+					@click="switchCoach(coach.value)"
+				>
+					<text class="switch-text" :class="{ active: coach.value == currentCoach.value }">{{ coach.label }}</text>
+				</view>
+			</view>
+
+			<image class="coach-avatar-large" :src="currentCoach.avatar" mode="aspectFit" />
+			<text class="coach-name">{{ currentCoach.label }}</text>
+			<text class="coach-english-name">{{ currentCoach.englishName }}</text>
+			<text class="coach-intro">{{ currentCoach.intro }}</text>
+
+			<view class="coach-tags">
+				<view v-for="tag in currentCoach.tags" :key="tag" class="tag-chip" :class="{ vera: currentCoach.value == 'vera' }">
+					<text class="tag-text" :class="{ vera: currentCoach.value == 'vera' }">{{ tag }}</text>
+				</view>
+			</view>
+
+			<button class="select-btn" @click="selectCoach">选择{{ currentCoach.label }}</button>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { CoachData, getAllCoaches, getCoachByValue } from '@/utils/coachManager.uts'
+
+const props = defineProps<{
+	visible: boolean
+	coachData: CoachData
+}>()
+
+const emit = defineEmits(['close', 'select'])
+const allCoaches = getAllCoaches()
+const currentCoach = ref<CoachData>(props.coachData)
+
+function switchCoach(coachValue: string) {
+	const coach = getCoachByValue(coachValue)
+	if (coach != null) currentCoach.value = coach
+}
+
+function close() {
+	emit('close')
+}
+
+function selectCoach() {
+	emit('select', currentCoach.value)
+	close()
+}
+</script>
+
+<style>
+.modal-overlay { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 999; background-color: rgba(0,0,0,0.58); align-items: center; justify-content: center; }
+.modal-mask { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+.modal-card { position: relative; z-index: 1; width: 560rpx; padding: 44rpx 32rpx 30rpx; border-radius: 32rpx; background-color: #d9ecff; align-items: center; }
+.modal-card.vera { background-color: #ffd8e7; }
+.modal-close { position: absolute; left: 20rpx; top: 18rpx; font-size: 42rpx; line-height: 44rpx; color: rgba(36,59,83,0.68); }
+.modal-title { font-size: 36rpx; font-weight: 700; color: #243b53; margin-bottom: 20rpx; }
+.switch-row { display: flex; flex-direction: row; justify-content: center; margin-bottom: 18rpx; }
+.switch-btn { width: 108rpx; height: 48rpx; border-radius: 24rpx; border-width: 2rpx; border-style: solid; border-color: rgba(36,59,83,0.14); background-color: rgba(255,255,255,0.42); margin-left: 10rpx; margin-right: 10rpx; align-items: center; justify-content: center; }
+.switch-btn.active { background-color: #00c853; border-color: #00c853; }
+.switch-text { font-size: 24rpx; line-height: 48rpx; font-weight: 700; color: #36506b; text-align: center; }
+.switch-text.active { color: #ffffff; }
+.coach-avatar-large { width: 190rpx; height: 190rpx; border-radius: 95rpx; margin-bottom: 18rpx; }
+.coach-name { font-size: 40rpx; font-weight: 700; color: #243b53; margin-bottom: 8rpx; }
+.coach-english-name { font-size: 24rpx; color: rgba(36,59,83,0.72); margin-bottom: 18rpx; }
+.coach-intro { font-size: 26rpx; line-height: 40rpx; text-align: center; color: rgba(36,59,83,0.88); margin-bottom: 18rpx; }
+.coach-tags { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; margin-bottom: 22rpx; }
+.tag-chip { padding: 8rpx 20rpx; border-radius: 20rpx; border-width: 1rpx; border-style: solid; border-color: rgba(90,145,220,0.38); background-color: rgba(255,255,255,0.58); margin-left: 6rpx; margin-right: 6rpx; margin-bottom: 12rpx; }
+.tag-chip.vera { border-color: rgba(232,134,174,0.45); }
+.tag-text { font-size: 22rpx; font-weight: 700; color: #3d76c5; }
+.tag-text.vera { color: #c25787; }
+.select-btn { width: 480rpx; height: 88rpx; line-height: 88rpx; border-radius: 44rpx; background-color: #00c853; color: #ffffff; font-size: 32rpx; font-weight: 700; }
+</style>

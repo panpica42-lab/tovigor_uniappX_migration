@@ -1,0 +1,833 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<view class="header-title">
+				<text class="title-main">HI,Tovigor</text>
+				<view class="header-right">
+					<view class="control-panel">
+						<image class="control-icon" :class="{ active: controlStates.light }" src="/static/icons/homeActivity/ic_control_light.svg" mode="aspectFit" @click="toggleControl('light')" />
+						<image class="control-icon" :class="{ active: controlStates.wifi }" src="/static/icons/homeActivity/ic_control_wifi.svg" mode="aspectFit" @click="toggleControl('wifi')" />
+						<image class="control-icon" :class="{ active: controlStates.voice }" src="/static/icons/homeActivity/ic_control_voice.svg" mode="aspectFit" @click="toggleControl('voice')" />
+						<image class="control-icon" :class="{ active: controlStates.bluetooth }" src="/static/icons/homeActivity/ic_control_bluetooth.svg" mode="aspectFit" @click="toggleControl('bluetooth')" />
+						<image class="control-icon" :class="{ active: controlStates.setting }" src="/static/icons/homeActivity/ic_setting_system.svg" mode="aspectFit" @click="toggleControl('setting')" />
+						<image class="control-icon" :class="{ active: controlStates.power }" src="/static/icons/homeActivity/ic_control_on-off.svg" mode="aspectFit" @click="toggleControl('power')" />
+					</view>
+					<image class="usage-guide-btn" src="/static/icons/homeActivity/btn_usage_guide.svg" mode="aspectFit" @click="showUsageGuide" />
+				</view>
+			</view>
+			<text class="title-sub">Tovigor的健身世界，活力一触即发！</text>
+		</view>
+
+		<view class="main-section">
+			<view class="card-grid">
+				<view class="card-left" @click="goToFreeTraining">
+					<view class="card card-large card-free">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_free_training.svg" mode="aspectFill" />
+						<view class="card-content">
+							<text class="card-title">自由训练</text>
+							<text class="card-subtitle">数字力量 自由掌握</text>
+						</view>
+					</view>
+				</view>
+				<view class="card-right">
+					<view class="card card-small card-body" @click="goToPartTraining">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_body_training.svg" mode="aspectFill" />
+						<view class="card-content">
+							<text class="card-title">部位训练</text>
+							<text class="card-subtitle">针对各部位的系统设计</text>
+						</view>
+					</view>
+					<view class="card card-small card-assess" @click="goToSmartAssess">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_smart_assess.svg" mode="aspectFill" />
+						<view class="card-content">
+							<text class="card-title">智能评估</text>
+							<text class="card-subtitle">定制专属自己的健康方案</text>
+						</view>
+					</view>
+				</view>
+			</view>
+
+			<view class="entertainment-section">
+				<text class="entertainment-title">娱乐休闲</text>
+				<view class="entertainment-grid">
+					<view class="game-item" @click="goToFlappyBird">
+						<image class="game-icon" src="/static/icons/games/flappyBirdGame/ic_bird.png" mode="aspectFit" />
+						<text class="game-name">管道小鸟</text>
+					</view>
+					<view class="game-item game-item-add">
+						<text class="game-add-icon">+</text>
+						<text class="game-name">点击更多</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<view class="course-section">
+			<view class="section-header">
+				<text class="section-title">课程推荐</text>
+				<view class="debug-buttons">
+					<view class="serial-test-btn light-strip-btn" @click="showUnavailable('灯带控制')">
+						<text class="serial-test-text">灯带控制</text>
+					</view>
+					<view class="serial-test-btn" @click="goToSerialPoc">
+						<text class="serial-test-text">串口v1</text>
+					</view>
+					<view class="serial-test-btn serial-test-btn-v2" @click="goToSerialPoc">
+						<text class="serial-test-text">串口v2</text>
+					</view>
+				</view>
+			</view>
+			<scroll-view class="course-scroll" scroll-y="true" :show-scrollbar="false" :style="{ height: courseScrollHeight + 'px' }">
+				<view class="course-grid">
+					<view class="course-item" v-for="course in courseList" :key="course.id" @click="handleCourseClick(course.id)">
+						<view class="course-image-wrapper">
+							<image class="course-image" :src="course.cover" mode="aspectFill" />
+							<view class="play-btn"><view class="play-triangle"></view></view>
+						</view>
+						<view class="course-info">
+							<text class="course-name">{{ course.title }}</text>
+							<text class="course-duration">{{ course.duration }}</text>
+						</view>
+					</view>
+				</view>
+			</scroll-view>
+		</view>
+
+		<view v-if="showGuideModal" class="guide-mask" @click="closeUsageGuide">
+			<view class="guide-modal">
+				<view class="guide-header">
+					<text class="guide-title">使用指南</text>
+					<image class="guide-close" src="/static/icons/general/btn_general_close.svg" mode="aspectFit" @click="closeUsageGuide" />
+				</view>
+				<view class="guide-list">
+					<view class="guide-item" v-for="item in guideItems" :key="item.id">
+						<image class="guide-img" :src="item.image" mode="aspectFill" />
+						<view class="guide-copy">
+							<text class="guide-item-title">{{ item.title }}</text>
+							<text class="guide-label">{{ item.textLabel }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<view v-if="showBrightnessModal" class="brightness-mask" @click="closeBrightnessModal">
+			<view class="brightness-modal">
+				<view class="brightness-header">
+					<text class="brightness-title">亮度</text>
+				</view>
+				<view class="brightness-card">
+					<view class="brightness-slider-row">
+						<text class="brightness-side-icon">☀</text>
+						<slider class="brightness-slider" :value="brightnessValue" :min="0" :max="100" :step="1" activeColor="#9dd532" backgroundColor="#ffffff" block-color="#9dd532" :block-size="20" @changing="handleBrightnessChanging" @change="handleBrightnessChange" />
+						<text class="brightness-side-icon right">☀</text>
+						<text class="brightness-value">{{ brightnessValue }}</text>
+					</view>
+				</view>
+				<view class="brightness-mode-row">
+					<view class="brightness-mode-item" :class="{ active: brightnessMode == 'eyeCare' }" @click="applyBrightnessMode('eyeCare')">
+						<text class="brightness-mode-text">护眼模式</text>
+						<switch :checked="brightnessMode == 'eyeCare'" color="#9dd532" disabled />
+					</view>
+					<view class="brightness-mode-item" :class="{ active: brightnessMode == 'dark' }" @click="applyBrightnessMode('dark')">
+						<text class="brightness-mode-text">深色模式</text>
+						<switch :checked="brightnessMode == 'dark'" color="#9dd532" disabled />
+					</view>
+				</view>
+			</view>
+		</view>
+
+	</view>
+</template>
+
+<script setup lang="uts">
+import { partTrainingCourses, PartTrainingCourse } from '@/pages/partTraining/course-data.uts'
+import { getAllCoaches } from '@/utils/coachManager.uts'
+
+type ControlStates = {
+	light: boolean
+	wifi: boolean
+	voice: boolean
+	bluetooth: boolean
+	setting: boolean
+	power: boolean
+}
+
+type GuideItem = {
+	id: number
+	title: string
+	image: string
+	textLabel: string
+}
+
+const PART_TRAINING_WARMUP_DELAY_MS = 500
+const PART_TRAINING_WARMUP_COVER_COUNT = 4
+const TRAINING_BACKGROUND_POSTER = '/static/icons/general/video-placeholder-2-poster.jpg'
+
+const courseList = ref<PartTrainingCourse[]>(partTrainingCourses)
+const courseScrollHeight = ref(240)
+const showGuideModal = ref(false)
+const showBrightnessModal = ref(false)
+const brightnessValue = ref(60)
+const brightnessMode = ref('')
+const controlStates = ref<ControlStates>({
+	light: false,
+	wifi: false,
+	voice: false,
+	bluetooth: false,
+	setting: false,
+	power: false
+})
+const guideItems = ref<GuideItem[]>([
+	{ id: 1, title: '如何调节力臂？ 演示视频', image: '/static/icons/homeActivity/ic_course_01.png', textLabel: '文字指导' },
+	{ id: 2, title: '如何更换配件？ 演示视频', image: '/static/icons/homeActivity/ic_course_02.png', textLabel: '文字指导' }
+])
+let partTrainingWarmupTimer = 0
+
+function showUsageGuide() {
+	showGuideModal.value = true
+}
+
+function closeUsageGuide() {
+	showGuideModal.value = false
+}
+
+function openBrightnessModal() {
+	controlStates.value.light = true
+	showBrightnessModal.value = true
+}
+
+function closeBrightnessModal() {
+	controlStates.value.light = false
+	showBrightnessModal.value = false
+}
+
+function setBrightnessValue(value: number) {
+	brightnessValue.value = Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function handleBrightnessChanging(event: UniSliderChangeEvent) {
+	setBrightnessValue(parseInt(`${event.detail.value}`, 10))
+}
+
+function handleBrightnessChange(event: UniSliderChangeEvent) {
+	setBrightnessValue(parseInt(`${event.detail.value}`, 10))
+}
+
+function applyBrightnessMode(mode: string) {
+	if (brightnessMode.value == mode) {
+		brightnessMode.value = ''
+		return
+	}
+	brightnessMode.value = mode
+	if (mode == 'eyeCare') setBrightnessValue(38)
+	if (mode == 'dark') setBrightnessValue(18)
+}
+
+function showUnavailable(name: string) {
+	uni.showToast({ title: name + '迁移中', icon: 'none' })
+}
+
+function toggleControl(key: string) {
+	if (key == 'light') {
+		if (showBrightnessModal.value) closeBrightnessModal()
+		else openBrightnessModal()
+		return
+	}
+	if (key == 'wifi') {
+		controlStates.value.wifi = true
+		uni.navigateTo({ url: '/pages/system/wifi' })
+		return
+	}
+	if (key == 'voice') controlStates.value.voice = !controlStates.value.voice
+	if (key == 'bluetooth') controlStates.value.bluetooth = !controlStates.value.bluetooth
+	if (key == 'setting') controlStates.value.setting = !controlStates.value.setting
+	if (key == 'power') controlStates.value.power = !controlStates.value.power
+}
+
+function goToFreeTraining() {
+	uni.navigateTo({ url: '/pages/freeTraining/free-training' })
+}
+
+function goToPartTraining() {
+	const traceTs = Date.now()
+	console.log('[PartTrainingTrace] index click now=' + traceTs.toString())
+	uni.navigateTo({
+		url: '/pages/partTraining/part-training?traceTs=' + traceTs.toString(),
+		animationType: 'none',
+		animationDuration: 0,
+		success: () => {
+			const now = Date.now()
+			console.log('[PartTrainingTrace] navigateTo success now=' + now.toString() + ' deltaFromClick=' + (now - traceTs).toString() + 'ms')
+		},
+		fail: () => {
+			const now = Date.now()
+			console.log('[PartTrainingTrace] navigateTo fail now=' + now.toString() + ' deltaFromClick=' + (now - traceTs).toString() + 'ms')
+		},
+		complete: () => {
+			const now = Date.now()
+			console.log('[PartTrainingTrace] navigateTo complete now=' + now.toString() + ' deltaFromClick=' + (now - traceTs).toString() + 'ms')
+		}
+	})
+}
+
+function goToSmartAssess() {
+	showUnavailable('智能评估')
+}
+
+function goToFlappyBird() {
+	showUnavailable('管道小鸟')
+}
+
+function goToSerialPoc() {
+	uni.navigateTo({ url: '/pages/poc/training-runtime-poc' })
+}
+
+function handleCourseClick(id: number) {
+	uni.navigateTo({ url: '/pages/partTraining/course-detail-adapter?id=' + id.toString() })
+}
+
+function calcCourseScrollHeight() {
+	const systemInfo = uni.getSystemInfoSync()
+	const rpxToPx = systemInfo.windowWidth / 750
+	const fixedRpx = 795
+	const nextHeight = Math.floor(systemInfo.windowHeight - fixedRpx * rpxToPx)
+	courseScrollHeight.value = Math.max(180, nextHeight)
+}
+
+function warmupImage(src: string) {
+	uni.getImageInfo({
+		src,
+		success: () => {},
+		fail: () => {}
+	})
+}
+
+function warmupPartTrainingEntry() {
+	const warmupCourses = partTrainingCourses.slice(0, PART_TRAINING_WARMUP_COVER_COUNT)
+	for (let i = 0; i < warmupCourses.length; i += 1) {
+		warmupImage(warmupCourses[i].cover)
+	}
+	const coaches = getAllCoaches()
+	for (let i = 0; i < coaches.length; i += 1) {
+		warmupImage(coaches[i].avatar)
+	}
+	warmupImage(TRAINING_BACKGROUND_POSTER)
+	console.log('[PartTrainingWarmup] courses=' + warmupCourses.length.toString() + ' coaches=' + coaches.length.toString())
+}
+
+function schedulePartTrainingWarmup() {
+	if (partTrainingWarmupTimer > 0) clearTimeout(partTrainingWarmupTimer)
+	partTrainingWarmupTimer = setTimeout(() => {
+		partTrainingWarmupTimer = 0
+		warmupPartTrainingEntry()
+	}, PART_TRAINING_WARMUP_DELAY_MS)
+}
+
+onMounted(() => {
+	calcCourseScrollHeight()
+	schedulePartTrainingWarmup()
+})
+
+onUnmounted(() => {
+	if (partTrainingWarmupTimer > 0) {
+		clearTimeout(partTrainingWarmupTimer)
+		partTrainingWarmupTimer = 0
+	}
+})
+</script>
+
+<style>
+.container {
+	background-color: #F5F5F5;
+	padding: 40rpx 30rpx;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.header {
+	margin-bottom: 30rpx;
+	flex-shrink: 0;
+}
+
+.header-title {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 10rpx;
+}
+
+.header-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.control-panel {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 58rpx;
+	padding: 0 14rpx;
+	background-color: #FFFFFF;
+	border-radius: 10rpx;
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.14);
+	border-width: 1rpx;
+	border-style: solid;
+	border-color: #E2E8F0;
+}
+
+.control-icon {
+	width: 34rpx;
+	height: 34rpx;
+	margin: 0 7rpx;
+	opacity: 0.72;
+}
+
+.control-icon.active {
+	opacity: 1;
+}
+
+.usage-guide-btn {
+	width: 58rpx;
+	height: 58rpx;
+	margin-left: 16rpx;
+}
+
+.title-main {
+	font-size: 48rpx;
+	font-weight: bold;
+	color: #000000;
+}
+
+.title-sub {
+	font-size: 24rpx;
+	color: #999999;
+}
+
+.main-section {
+	flex-shrink: 0;
+	background-color: #FFFFFF;
+	border-radius: 24rpx;
+	padding: 24rpx;
+	margin-bottom: 20rpx;
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+	border: 2rpx solid rgba(255, 255, 255, 0.8);
+}
+
+.card-grid {
+	display: flex;
+	flex-direction: row;
+	flex-shrink: 0;
+}
+
+.card-left {
+	flex: 1;
+	margin-right: 20rpx;
+}
+
+.card-right {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+.card {
+	border-radius: 24rpx;
+	overflow: hidden;
+	position: relative;
+}
+
+.card-bg-img {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 0;
+}
+
+.card-content {
+	position: relative;
+	z-index: 1;
+	padding: 20rpx;
+	display: flex;
+	flex-direction: column;
+}
+
+.card-large {
+	height: 300rpx;
+}
+
+.card-small {
+	height: 140rpx;
+	margin-bottom: 20rpx;
+}
+
+.card-small:last-child {
+	margin-bottom: 0;
+}
+
+.card-title {
+	font-size: 32rpx;
+	font-weight: bold;
+	color: #000000;
+	margin-bottom: 6rpx;
+}
+
+.card-subtitle {
+	font-size: 20rpx;
+	color: #333333;
+}
+
+.entertainment-section {
+	margin-top: 20rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.entertainment-title {
+	margin-left: 20rpx;
+	font-size: 32rpx;
+	font-weight: bold;
+	color: #666666;
+}
+
+.entertainment-grid {
+	display: flex;
+	flex-direction: row;
+}
+
+.game-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 140rpx;
+	height: 120rpx;
+	margin-left: 20rpx;
+	background-color: #FAFAFA;
+	border-radius: 16rpx;
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.game-item-add {
+	background-color: #F5F5F5;
+	border-width: 2rpx;
+	border-style: dashed;
+	border-color: #CCCCCC;
+	box-shadow: none;
+}
+
+.game-icon {
+	width: 56rpx;
+	height: 56rpx;
+	margin-bottom: 8rpx;
+}
+
+.game-add-icon {
+	font-size: 40rpx;
+	color: #999999;
+	line-height: 40rpx;
+	margin-bottom: 8rpx;
+}
+
+.game-name {
+	font-size: 20rpx;
+	color: #666666;
+}
+
+.course-section {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-height: 0;
+	height: 1px;
+}
+
+.section-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 20rpx;
+	flex-shrink: 0;
+}
+
+.section-title {
+	background-color: #333333;
+	border-radius: 50rpx;
+	padding: 15rpx 30rpx;
+	font-size: 26rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.debug-buttons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.serial-test-btn {
+	background-color: #667eea;
+	border-radius: 50rpx;
+	padding: 15rpx 24rpx;
+	margin-left: 14rpx;
+}
+
+.serial-test-btn-v2 {
+	background-color: #2ecc71;
+}
+
+.light-strip-btn {
+	background-color: #f59e0b;
+}
+
+.serial-test-text {
+	font-size: 24rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.course-scroll {
+	flex-shrink: 0;
+	min-height: 0;
+}
+
+.course-grid {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	padding: 10rpx 0;
+}
+
+.course-item {
+	width: 330rpx;
+	margin-bottom: 20rpx;
+	background-color: #FFFFFF;
+	border-radius: 16rpx;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.course-image-wrapper {
+	position: relative;
+	width: 330rpx;
+	height: 280rpx;
+}
+
+.course-image {
+	width: 330rpx;
+	height: 280rpx;
+}
+
+.play-btn {
+	position: absolute;
+	top: 15rpx;
+	right: 15rpx;
+	width: 50rpx;
+	height: 50rpx;
+	background-color: rgba(0, 0, 0, 0.6);
+	border-radius: 25rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+
+.play-triangle {
+	width: 0;
+	height: 0;
+	border-left: 16rpx solid #FFFFFF;
+	border-top: 10rpx solid transparent;
+	border-bottom: 10rpx solid transparent;
+	margin-left: 4rpx;
+}
+
+.course-info {
+	padding: 15rpx;
+	display: flex;
+	flex-direction: column;
+}
+
+.course-name {
+	font-size: 24rpx;
+	color: #333333;
+	margin-bottom: 6rpx;
+}
+
+.course-duration {
+	font-size: 20rpx;
+	color: #999999;
+}
+
+.guide-mask,
+.brightness-mask {
+	position: fixed;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 50;
+	background-color: rgba(0, 0, 0, 0.06);
+}
+
+.guide-modal {
+	position: absolute;
+	top: 120rpx;
+	left: 44rpx;
+	right: 44rpx;
+	padding: 28rpx;
+	background-color: #FFFFFF;
+	border-radius: 28rpx;
+	box-shadow: 0 18rpx 48rpx rgba(0, 0, 0, 0.12);
+}
+
+.guide-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 20rpx;
+}
+
+.guide-title {
+	font-size: 34rpx;
+	font-weight: bold;
+	color: #111111;
+}
+
+.guide-close {
+	width: 36rpx;
+	height: 36rpx;
+}
+
+.guide-item {
+	display: flex;
+	flex-direction: row;
+	margin-bottom: 18rpx;
+	padding: 16rpx;
+	border-radius: 16rpx;
+	background-color: #F5F5F5;
+}
+
+.guide-img {
+	width: 150rpx;
+	height: 92rpx;
+	border-radius: 12rpx;
+}
+
+.guide-copy {
+	flex: 1;
+	margin-left: 18rpx;
+	justify-content: center;
+}
+
+.guide-item-title {
+	font-size: 25rpx;
+	font-weight: bold;
+	color: #111111;
+}
+
+.guide-label {
+	margin-top: 8rpx;
+	font-size: 22rpx;
+	color: #888888;
+}
+
+.brightness-modal {
+	position: absolute;
+	top: 104rpx;
+	right: 30rpx;
+	width: 620rpx;
+	padding: 30rpx 26rpx 24rpx;
+	background-color: rgba(255, 255, 255, 0.98);
+	border-radius: 34rpx;
+	box-shadow: 0 18rpx 48rpx rgba(0, 0, 0, 0.12);
+}
+
+.brightness-header {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 24rpx;
+}
+
+.brightness-title {
+	font-size: 34rpx;
+	font-weight: bold;
+	color: #111111;
+}
+
+.brightness-card {
+	padding: 24rpx 20rpx;
+	background-color: #e6e6e6;
+	border-radius: 28rpx;
+}
+
+.brightness-slider-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.brightness-side-icon {
+	width: 32rpx;
+	font-size: 24rpx;
+	text-align: center;
+	color: #7d7d7d;
+}
+
+.brightness-side-icon.right {
+	color: #ffffff;
+}
+
+.brightness-slider {
+	flex: 1;
+	margin: 0 10rpx;
+}
+
+.brightness-value {
+	width: 52rpx;
+	margin-left: 8rpx;
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #4a4a4a;
+	text-align: right;
+}
+
+.brightness-mode-row {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	margin-top: 28rpx;
+}
+
+.brightness-mode-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	margin: 0 28rpx;
+}
+
+.brightness-mode-item.active .brightness-mode-text {
+	color: #111111;
+	font-weight: bold;
+}
+
+.brightness-mode-text {
+	margin-bottom: 8rpx;
+	font-size: 24rpx;
+	color: #4d4d4d;
+}
+
+</style>

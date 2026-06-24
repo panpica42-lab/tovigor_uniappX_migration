@@ -1,0 +1,143 @@
+<template>
+	<view class="page">
+		<view class="nav-bar">
+			<image class="back-btn" src="/static/icons/general/btn_general_back.svg" mode="aspectFit" @click="handleBack" />
+			<text class="nav-title">选中动作</text>
+			<view class="nav-placeholder"></view>
+		</view>
+
+		<scroll-view class="list-scroll" scroll-y :show-scrollbar="false">
+			<view class="action-card" v-for="(action, index) in actions" :key="action.id">
+				<image class="action-cover" :src="action.cover" mode="aspectFill" />
+				<view class="action-main">
+					<text class="action-name">{{ action.name }}</text>
+					<text class="action-meta">{{ action.part }} · {{ action.equipment }} · {{ action.modeLabel }}</text>
+					<text class="action-meta">{{ action.defaultResistance }}kg</text>
+					<view class="config-row">
+						<text class="config-label">组数</text>
+						<view class="stepper"><view class="step-btn" @click="changeSets(index, -1)"><text class="step-text">-</text></view><text class="step-value">{{ action.sets }}</text><view class="step-btn" @click="changeSets(index, 1)"><text class="step-text">+</text></view></view>
+						<text class="config-label reps-label">次数</text>
+						<view class="stepper"><view class="step-btn" @click="changeReps(index, -1)"><text class="step-text">-</text></view><text class="step-value">{{ action.reps }}</text><view class="step-btn" @click="changeReps(index, 1)"><text class="step-text">+</text></view></view>
+					</view>
+				</view>
+				<view class="side-actions">
+					<view class="side-btn" :class="{ disabled: index == 0 }" @click="moveAction(index, -1)"><text class="side-text">上移</text></view>
+					<view class="side-btn" :class="{ disabled: index == actions.length - 1 }" @click="moveAction(index, 1)"><text class="side-text">下移</text></view>
+					<view class="side-btn delete-btn" @click="deleteAction(index)"><text class="side-text delete-text">删除</text></view>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view class="bottom-bar">
+			<view class="start-btn" @click="startTraining"><text class="start-btn-text">开始训练</text></view>
+		</view>
+
+		<view v-if="showBackModal" class="modal-mask">
+			<view class="confirm-card">
+				<text class="confirm-title">确认返回</text>
+				<text class="confirm-text">返回将丢失当前配置，确定要返回吗？</text>
+				<view class="confirm-actions">
+					<view class="confirm-btn cancel-btn" @click="closeBackModal"><text class="confirm-btn-text">取消</text></view>
+					<view class="confirm-btn ok-btn" @click="confirmBack"><text class="confirm-btn-text ok-text">确认</text></view>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { FreeTrainingAction, cloneAction } from './action-data.uts'
+import { getSelectedActions, setTrainingActions } from './free-training-store.uts'
+
+const actions = ref<FreeTrainingAction[]>([])
+const showBackModal = ref(false)
+
+function clampCount(value: number): number { return Math.max(1, Math.min(99, value)) }
+function cloneList(source: FreeTrainingAction[]): FreeTrainingAction[] {
+	return source.map((action: FreeTrainingAction): FreeTrainingAction => cloneAction(action))
+}
+function setActionList(next: FreeTrainingAction[]) { actions.value = cloneList(next) }
+function changeSets(index: number, delta: number) {
+	const next = cloneList(actions.value)
+	next[index].sets = clampCount(next[index].sets + delta)
+	actions.value = next
+}
+function changeReps(index: number, delta: number) {
+	const next = cloneList(actions.value)
+	next[index].reps = clampCount(next[index].reps + delta)
+	actions.value = next
+}
+function moveAction(index: number, delta: number) {
+	const target = index + delta
+	if (target < 0 || target >= actions.value.length) return
+	const next = cloneList(actions.value)
+	const current = next[index]
+	next[index] = next[target]
+	next[target] = current
+	actions.value = next
+}
+function deleteAction(index: number) {
+	const next = cloneList(actions.value)
+	next.splice(index, 1)
+	actions.value = next
+	uni.showToast({ title: '动作已删除', icon: 'none' })
+}
+function handleBack() { showBackModal.value = true }
+function closeBackModal() { showBackModal.value = false }
+function confirmBack() {
+	showBackModal.value = false
+	uni.navigateBack()
+}
+function startTraining() {
+	if (actions.value.length == 0) {
+		uni.showToast({ title: '请先添加动作', icon: 'none' })
+		return
+	}
+	setTrainingActions(actions.value)
+	uni.navigateTo({ url: '/pages/freeTraining/action-training' })
+}
+
+onLoad(() => {
+	setActionList(getSelectedActions())
+})
+</script>
+
+<style>
+.page { height: 100%; padding: 0 24rpx; background-color: #F5F5F5; overflow: hidden; }
+.nav-bar { height: 104rpx; padding-top: 20rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 60rpx; height: 60rpx; }
+.nav-title { font-size: 36rpx; font-weight: 700; color: #333333; }
+.nav-placeholder { width: 60rpx; }
+.list-scroll { flex: 1; min-height: 0; }
+.action-card { margin-bottom: 20rpx; padding: 16rpx; border-radius: 24rpx; background-color: #FFFFFF; flex-direction: row; }
+.action-cover { width: 160rpx; height: 160rpx; border-radius: 16rpx; }
+.action-main { flex: 1; min-width: 0; margin-left: 16rpx; }
+.action-name { font-size: 28rpx; font-weight: 700; color: #222222; lines: 1; }
+.action-meta { margin-top: 6rpx; font-size: 21rpx; color: #777777; }
+.config-row { margin-top: 12rpx; flex-direction: row; align-items: center; }
+.config-label { font-size: 22rpx; color: #444444; margin-right: 8rpx; }
+.reps-label { margin-left: 14rpx; }
+.stepper { flex-direction: row; align-items: center; }
+.step-btn { width: 42rpx; height: 42rpx; border-radius: 21rpx; background-color: #EDF2F7; align-items: center; justify-content: center; }
+.step-text { font-size: 28rpx; font-weight: 700; color: #333333; line-height: 32rpx; }
+.step-value { width: 40rpx; text-align: center; font-size: 24rpx; font-weight: 700; color: #222222; }
+.side-actions { width: 80rpx; align-items: flex-end; justify-content: space-between; }
+.side-btn { width: 70rpx; height: 40rpx; border-radius: 20rpx; background-color: #F0F0F0; align-items: center; justify-content: center; }
+.side-btn.disabled { opacity: 0.35; }
+.side-text { font-size: 20rpx; color: #444444; }
+.delete-btn { background-color: #FFECEC; }
+.delete-text { color: #FF4D4F; }
+.bottom-bar { padding: 20rpx 0 40rpx; }
+.start-btn { height: 88rpx; border-radius: 44rpx; background-color: #00C853; align-items: center; justify-content: center; }
+.start-btn-text { font-size: 32rpx; font-weight: 700; color: #FFFFFF; }
+.modal-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 100; background-color: rgba(0,0,0,0.45); align-items: center; justify-content: center; }
+.confirm-card { width: 540rpx; padding: 40rpx 32rpx; border-radius: 28rpx; background-color: #FFFFFF; align-items: center; }
+.confirm-title { font-size: 34rpx; font-weight: 700; color: #222222; }
+.confirm-text { margin-top: 22rpx; font-size: 28rpx; color: #666666; text-align: center; }
+.confirm-actions { width: 100%; margin-top: 36rpx; flex-direction: row; justify-content: space-between; }
+.confirm-btn { width: 220rpx; height: 78rpx; border-radius: 39rpx; align-items: center; justify-content: center; }
+.cancel-btn { background-color: #F0F0F0; }
+.ok-btn { background-color: #00C853; }
+.confirm-btn-text { font-size: 28rpx; font-weight: 700; color: #333333; }
+.ok-text { color: #FFFFFF; }
+</style>

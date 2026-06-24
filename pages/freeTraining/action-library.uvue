@@ -1,0 +1,397 @@
+<template>
+	<view class="page">
+		<view class="header">
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
+			<text class="header-title">动作库</text>
+			<view class="done-btn" :class="{ disabled: selectedCount == 0 }" @click="handleDone">
+				<text class="done-text">添加完成</text>
+			</view>
+			<view v-if="selectedCount > 0" class="badge">
+				<text class="badge-text">{{ selectedCount }}</text>
+			</view>
+		</view>
+
+		<view class="content">
+			<view class="sidebar">
+				<view class="ai-header">
+					<view class="ai-recommend-btn" @click="handleOpenAiRecommend">
+						<image class="ai-avatar" src="/static/icons/partTrainingActivity/AI_coach_Vince.png" mode="aspectFit" />
+						<text class="ai-text">AI推荐</text>
+					</view>
+				</view>
+
+				<scroll-view class="filter-list" scroll-y="true" :show-scrollbar="false">
+					<view class="filter-title" :class="{ pending: hasPendingFilterChanges, applied: hasAppliedActionFilters && !hasPendingFilterChanges }" @click="handleApplyFilters">
+						<text class="filter-title-text">{{ hasPendingFilterChanges ? '应用筛选' : '筛选' }}</text>
+						<view v-if="filterButtonCount > 0" class="filter-count-badge">
+							<text class="filter-count-text">{{ filterButtonCount }}</text>
+						</view>
+					</view>
+
+					<view class="library-switch">
+						<view class="library-switch-btn" @click="handleGoCourseLibrary">
+							<text class="library-switch-text">课程库</text>
+						</view>
+						<view class="library-switch-btn active">
+							<text class="library-switch-text active">动作库</text>
+						</view>
+					</view>
+
+					<FilterPill label="部位" :active="expandedPart" :showArrow="true" @click="togglePart" />
+					<view v-if="expandedPart" class="filter-options">
+						<view v-for="option in partOptions" :key="option" class="option-chip" :class="{ active: hasFilterValue('part', option) }" @click="handleFilterChange('part', option)">
+							<text class="option-text">{{ option }}</text>
+						</view>
+					</view>
+
+					<FilterPill label="方式选择" :active="expandedMethod" :showArrow="true" @click="toggleMethod" />
+					<view v-if="expandedMethod" class="filter-options">
+						<view v-for="option in methodOptions" :key="option" class="option-chip" :class="{ active: hasFilterValue('method', option) }" @click="handleFilterChange('method', option)">
+							<text class="option-text">{{ option }}</text>
+						</view>
+					</view>
+
+					<FilterPill label="配件" :active="expandedEquipment" :showArrow="true" @click="toggleEquipment" />
+					<view v-if="expandedEquipment" class="filter-options">
+						<view v-for="option in equipmentOptions" :key="option" class="option-chip" :class="{ active: hasFilterValue('equipment', option) }" @click="handleFilterChange('equipment', option)">
+							<text class="option-text">{{ option }}</text>
+						</view>
+					</view>
+
+					<FilterPill label="AI教练" :active="expandedCoach" :showArrow="true" @click="toggleCoach" />
+					<view v-if="expandedCoach" class="coach-options">
+						<view
+							v-for="coach in coachOptions"
+							:key="coach.value"
+							class="coach-card"
+							:class="{ active: selectedCoachValue == coach.value, vince: coach.value == 'vince', vera: coach.value == 'vera' }"
+							@click="openCoachDetail(coach.value)"
+						>
+							<image class="coach-avatar" :src="coach.avatar" mode="aspectFit" />
+							<text class="coach-name">{{ coach.label }}</text>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+
+			<view class="main-column">
+				<scroll-view class="action-scroll" scroll-y="true" :show-scrollbar="false">
+					<view class="action-grid">
+						<view v-for="(action, index) in filteredActions" :key="action.id" class="action-item" :class="{ left: index % 2 == 0 }">
+							<view class="action-card" :class="{ selected: isSelected(action.id) }" @click="toggleSelect(action)">
+								<view class="cover-wrap">
+									<image class="action-cover" :src="action.cover" mode="aspectFill" />
+									<view v-if="isSelected(action.id)" class="selected-badge">
+										<text class="selected-badge-text">✓</text>
+									</view>
+								</view>
+								<view class="card-info">
+									<text class="action-name">{{ action.name }}</text>
+									<view class="detail-btn" @click.stop="openActionDetail(action)">
+										<text class="detail-text">详情</text>
+									</view>
+								</view>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
+
+		<view v-if="showDetailModal" class="modal-mask" @click="closeActionDetail">
+			<view class="detail-modal" @click.stop="noop">
+				<image class="modal-close" src="/static/icons/general/btn_general_close.svg" mode="aspectFit" @click="closeActionDetail" />
+				<text class="modal-title">{{ detailActionName }}</text>
+				<view class="modal-image-wrap">
+					<image class="modal-image" :src="detailActionCover" mode="aspectFit" />
+				</view>
+				<view class="modal-meta">
+					<text class="modal-meta-text">{{ detailActionMeta }}</text>
+					<text class="modal-meta-text">{{ detailActionPlan }}</text>
+				</view>
+				<view class="modal-select-btn" :class="{ selected: detailActionSelected }" @click="selectDetailAction">
+					<text class="modal-select-text">{{ detailActionSelected ? '已添加' : '选择添加' }}</text>
+				</view>
+			</view>
+		</view>
+
+		<CoachDetailModal
+			v-if="showCoachModal"
+			:visible="showCoachModal"
+			:coachData="currentCoach"
+			@close="closeCoachModal"
+			@select="selectCoach"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import FilterPill from '@/components/ui-box/filter-pill.uvue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal.uvue'
+import { FreeTrainingAction, freeTrainingActions, cloneAction } from './action-data.uts'
+import { setSelectedActions } from './free-training-store.uts'
+import { CoachData, getAllCoaches, getCoachByValue, getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.uts'
+
+type ActionFilterState = {
+	part: string[]
+	method: string[]
+	equipment: string[]
+}
+
+function createFilterState(): ActionFilterState {
+	return { part: [], method: [], equipment: [] }
+}
+
+function cloneFilters(source: ActionFilterState): ActionFilterState {
+	return {
+		part: [...source.part],
+		method: [...source.method],
+		equipment: [...source.equipment]
+	}
+}
+
+function valuesFor(source: ActionFilterState, key: string): string[] {
+	if (key == 'part') return source.part
+	if (key == 'method') return source.method
+	return source.equipment
+}
+
+function setValuesFor(source: ActionFilterState, key: string, values: string[]) {
+	if (key == 'part') source.part = values
+	if (key == 'method') source.method = values
+	if (key == 'equipment') source.equipment = values
+}
+
+function toggleValue(values: string[], value: string): string[] {
+	const next = [...values]
+	const index = next.indexOf(value)
+	if (index >= 0) next.splice(index, 1)
+	else next.push(value)
+	return next
+}
+
+function arrayEqual(left: string[], right: string[]): boolean {
+	if (left.length != right.length) return false
+	for (let i = 0; i < left.length; i += 1) {
+		if (!right.includes(left[i])) return false
+	}
+	return true
+}
+
+function filtersEqual(left: ActionFilterState, right: ActionFilterState): boolean {
+	return arrayEqual(left.part, right.part) &&
+		arrayEqual(left.method, right.method) &&
+		arrayEqual(left.equipment, right.equipment)
+}
+
+function getFilterCount(source: ActionFilterState): number {
+	return source.part.length + source.method.length + source.equipment.length
+}
+
+function matchesFilter(selectedValues: string[], actionValue: string): boolean {
+	if (selectedValues.length == 0) return true
+	return selectedValues.includes(actionValue)
+}
+
+function noop() {}
+
+const partOptions: string[] = ['胸部', '肩部', '手臂', '腰腹', '背部', '腿部']
+const methodOptions: string[] = ['有力臂', '无力臂']
+const equipmentOptions: string[] = ['双肩把手', '脚环', '三角把手', '中杆', '横杆', '绳索']
+const coachOptions = getAllCoaches()
+const fallbackAction = freeTrainingActions[0]
+
+const filters = ref<ActionFilterState>(createFilterState())
+const appliedFilters = ref<ActionFilterState>(createFilterState())
+const expandedPart = ref(true)
+const expandedMethod = ref(true)
+const expandedEquipment = ref(true)
+const expandedCoach = ref(true)
+const selectedActions = ref<FreeTrainingAction[]>([])
+const showDetailModal = ref(false)
+const detailAction = ref<FreeTrainingAction | null>(null)
+const showCoachModal = ref(false)
+const currentCoach = ref<CoachData>(getSelectedCoach())
+const selectedCoachValue = ref(getSelectedCoach().value)
+
+function hasFilterValue(key: string, value: string): boolean {
+	return valuesFor(filters.value, key).includes(value)
+}
+
+function handleFilterChange(key: string, value: string) {
+	const next = cloneFilters(filters.value)
+	setValuesFor(next, key, toggleValue(valuesFor(next, key), value))
+	filters.value = next
+}
+
+function handleApplyFilters() {
+	appliedFilters.value = cloneFilters(filters.value)
+}
+
+function isSelected(id: number): boolean {
+	return selectedActions.value.findIndex((action: FreeTrainingAction): boolean => action.id == id) >= 0
+}
+
+function toggleSelect(action: FreeTrainingAction) {
+	const index = selectedActions.value.findIndex((item: FreeTrainingAction): boolean => item.id == action.id)
+	if (index >= 0) {
+		selectedActions.value.splice(index, 1)
+	} else {
+		selectedActions.value.push(cloneAction(action))
+	}
+}
+
+function openActionDetail(action: FreeTrainingAction) {
+	detailAction.value = action
+	showDetailModal.value = true
+}
+
+function closeActionDetail() {
+	showDetailModal.value = false
+}
+
+function selectDetailAction() {
+	if (detailAction.value != null && !isSelected(detailAction.value.id)) {
+		selectedActions.value.push(cloneAction(detailAction.value))
+	}
+	closeActionDetail()
+}
+
+function togglePart() { expandedPart.value = !expandedPart.value }
+function toggleMethod() { expandedMethod.value = !expandedMethod.value }
+function toggleEquipment() { expandedEquipment.value = !expandedEquipment.value }
+function toggleCoach() { expandedCoach.value = !expandedCoach.value }
+
+function openCoachDetail(coachValue: string) {
+	const coach = getCoachByValue(coachValue)
+	if (coach != null) currentCoach.value = coach
+	showCoachModal.value = true
+}
+
+function closeCoachModal() {
+	showCoachModal.value = false
+}
+
+function selectCoach(coachData: CoachData) {
+	if (!setSelectedCoach(coachData.value)) return
+	currentCoach.value = coachData
+	selectedCoachValue.value = coachData.value
+	showCoachModal.value = false
+	uni.showToast({ title: '已选择' + coachData.label, icon: 'success', duration: 1500 })
+}
+
+function handleDone() {
+	if (selectedActions.value.length == 0) {
+		uni.showToast({ title: '请先选择动作', icon: 'none' })
+		return
+	}
+	setSelectedActions(selectedActions.value)
+	uni.navigateTo({ url: '/pages/freeTraining/selected-action' })
+}
+
+function handleBack() {
+	uni.navigateBack()
+}
+
+function handleGoCourseLibrary() {
+	uni.navigateTo({ url: '/pages/partTraining/part-training' })
+}
+
+function handleOpenAiRecommend() {
+	uni.showToast({ title: 'AI推荐功能开发中', icon: 'none' })
+}
+
+function getDisplayDetailAction(): FreeTrainingAction {
+	if (detailAction.value == null) return fallbackAction
+	return detailAction.value
+}
+
+const selectedCount = computed<number>(() => selectedActions.value.length)
+const filteredActions = computed<FreeTrainingAction[]>(() => {
+	return freeTrainingActions.filter((action: FreeTrainingAction): boolean => {
+		return matchesFilter(appliedFilters.value.part, action.part) &&
+			matchesFilter(appliedFilters.value.method, action.method) &&
+			matchesFilter(appliedFilters.value.equipment, action.equipment)
+	})
+})
+const hasPendingFilterChanges = computed<boolean>(() => !filtersEqual(filters.value, appliedFilters.value))
+const hasAppliedActionFilters = computed<boolean>(() => getFilterCount(appliedFilters.value) > 0)
+const filterButtonCount = computed<number>(() => hasPendingFilterChanges.value ? getFilterCount(filters.value) : getFilterCount(appliedFilters.value))
+const displayDetailAction = computed<FreeTrainingAction>(() => getDisplayDetailAction())
+const detailActionName = computed<string>(() => displayDetailAction.value.name)
+const detailActionCover = computed<string>(() => displayDetailAction.value.cover)
+const detailActionSelected = computed<boolean>(() => isSelected(displayDetailAction.value.id))
+const detailActionMeta = computed<string>(() => displayDetailAction.value.part + ' · ' + displayDetailAction.value.method + ' · ' + displayDetailAction.value.equipment)
+const detailActionPlan = computed<string>(() => displayDetailAction.value.modeLabel + ' ' + displayDetailAction.value.defaultResistance.toString() + 'kg · ' + displayDetailAction.value.recommendedSets.toString() + '组 × ' + displayDetailAction.value.recommendedReps.toString() + '次')
+</script>
+
+<style>
+.page { width: 750rpx; height: 100%; background-color: #F5F5F5; display: flex; flex-direction: column; padding: 4rpx 28rpx 0 16rpx; box-sizing: border-box; overflow: hidden; }
+.header { position: relative; height: 96rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.back-btn-position { position: absolute; left: 21rpx; top: 22rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.done-btn { position: absolute; right: 18rpx; top: 20rpx; height: 56rpx; padding: 0 24rpx; border-radius: 28rpx; background-color: #00C853; align-items: center; justify-content: center; }
+.done-btn.disabled { background-color: #CCCCCC; }
+.done-text { font-size: 24rpx; font-weight: 700; color: #FFFFFF; }
+.badge { position: absolute; top: 13rpx; right: 11rpx; z-index: 3; width: 30rpx; height: 30rpx; border-radius: 15rpx; background-color: #FF3B30; align-items: center; justify-content: center; }
+.badge-text { font-size: 18rpx; font-weight: 700; color: #FFFFFF; }
+.content { flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden; }
+.sidebar { flex-shrink: 0; width: 160rpx; height: 100%; padding: 8rpx 8rpx 12rpx; margin-right: 24rpx; border-radius: 16rpx; background-color: rgba(243,244,246,0.95); display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+.ai-header { align-items: center; margin-bottom: 8rpx; flex-shrink: 0; }
+.ai-recommend-btn { width: 100%; height: 56rpx; padding: 0 8rpx; border-radius: 28rpx; background-color: #65B1FE; flex-direction: row; align-items: center; justify-content: center; }
+.ai-avatar { width: 40rpx; height: 40rpx; margin-right: 6rpx; }
+.ai-text { font-size: 18rpx; color: #000000; font-weight: 700; }
+.filter-list { flex: 1; min-height: 0; overflow: hidden; }
+.filter-title { height: 42rpx; margin-bottom: 4rpx; padding: 0 10rpx; border-radius: 10rpx; background-color: rgba(200,200,200,0.3); flex-direction: row; align-items: center; justify-content: space-between; border-width: 1rpx; border-style: solid; border-color: transparent; }
+.filter-title.pending { background-color: #B7EF4A; border-color: #B7EF4A; box-shadow: 0 6rpx 16rpx rgba(183,239,74,0.32); }
+.filter-title.applied { background-color: rgba(183,239,74,0.18); border-color: rgba(128,183,27,0.28); }
+.filter-title-text { font-size: 18rpx; color: #666666; font-weight: 600; }
+.filter-title.pending .filter-title-text { color: #FFFFFF; }
+.filter-title.applied .filter-title-text { color: #6F8F17; }
+.filter-count-badge { margin-left: 6rpx; min-width: 28rpx; height: 28rpx; padding: 0 8rpx; border-radius: 14rpx; background-color: rgba(255,255,255,0.82); align-items: center; justify-content: center; }
+.filter-count-text { font-size: 16rpx; color: #6F8F17; font-weight: 700; }
+.library-switch { margin-bottom: 4rpx; padding: 2rpx 0; align-items: center; }
+.library-switch-btn { width: 132rpx; height: 34rpx; margin-bottom: 4rpx; border-radius: 10rpx; background-color: rgba(255,255,255,0.85); border-width: 1rpx; border-style: solid; border-color: rgba(200,200,200,0.5); align-items: center; justify-content: center; }
+.library-switch-btn.active { background-color: #B7EF4A; border-color: #B7EF4A; }
+.library-switch-text { font-size: 16rpx; color: #999999; font-weight: 600; }
+.library-switch-text.active { color: #FFFFFF; }
+.filter-options { display: flex; flex-direction: row; flex-wrap: wrap; margin-bottom: 4rpx; }
+.option-chip { min-height: 28rpx; margin-right: 4rpx; margin-bottom: 4rpx; padding: 3rpx 6rpx; border-radius: 14rpx; background-color: rgba(255,255,255,0.8); border-width: 1rpx; border-style: solid; border-color: rgba(200,200,200,0.5); align-items: center; justify-content: center; }
+.option-chip.active { background-color: #00C853; border-color: #00C853; }
+.option-text { font-size: 14rpx; color: #333333; }
+.option-chip.active .option-text { color: #FFFFFF; font-weight: 600; }
+.coach-options { align-items: center; margin-bottom: 4rpx; }
+.coach-card { width: 132rpx; height: 44rpx; margin-bottom: 4rpx; padding: 4rpx 6rpx; border-radius: 10rpx; background-color: rgba(255,255,255,0.92); flex-direction: row; align-items: center; border-width: 2rpx; border-style: solid; border-color: transparent; box-sizing: border-box; }
+.coach-card.vince { background-color: #65B1FE; }
+.coach-card.vera { background-color: #FFC5DC; }
+.coach-card.active { border-color: #00C853; box-shadow: 0 2rpx 8rpx rgba(0,200,83,0.3); }
+.coach-avatar { width: 32rpx; height: 32rpx; margin-right: 4rpx; }
+.coach-name { flex: 1; font-size: 14rpx; font-weight: 700; color: #333333; }
+.main-column { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.action-scroll { flex: 1; min-height: 0; overflow: hidden; }
+.action-grid { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; padding-bottom: 40rpx; }
+.action-item { width: 228rpx; margin-bottom: 24rpx; }
+.action-item.left { margin-right: 24rpx; }
+.action-card { width: 228rpx; border-radius: 22rpx; overflow: hidden; background-color: #FFFFFF; border-width: 4rpx; border-style: solid; border-color: transparent; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); box-sizing: border-box; }
+.action-card.selected { border-color: #00C853; box-shadow: 0 4rpx 20rpx rgba(0,200,83,0.25); }
+.cover-wrap { position: relative; width: 220rpx; height: 166rpx; overflow: hidden; }
+.action-cover { width: 220rpx; height: 166rpx; }
+.selected-badge { position: absolute; right: 10rpx; top: 10rpx; width: 42rpx; height: 42rpx; border-radius: 21rpx; background-color: #00C853; align-items: center; justify-content: center; }
+.selected-badge-text { font-size: 28rpx; font-weight: 700; color: #FFFFFF; }
+.card-info { padding: 14rpx 12rpx 16rpx; align-items: center; }
+.action-name { width: 196rpx; height: 34rpx; font-size: 24rpx; font-weight: 600; color: #333333; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-btn { margin-top: 12rpx; height: 34rpx; padding: 0 18rpx; border-radius: 17rpx; background-color: #F0F0F0; align-items: center; justify-content: center; }
+.detail-text { font-size: 22rpx; color: #666666; }
+.modal-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 800; background-color: rgba(0,0,0,0.52); align-items: center; justify-content: center; }
+.detail-modal { position: relative; width: 520rpx; padding: 34rpx 34rpx 40rpx; border-radius: 32rpx; background-color: #FFFFFF; align-items: center; }
+.modal-close { position: absolute; left: 18rpx; top: 18rpx; width: 38rpx; height: 38rpx; opacity: 0.65; }
+.modal-title { margin-bottom: 24rpx; font-size: 32rpx; font-weight: 700; color: #333333; text-align: center; }
+.modal-image-wrap { width: 420rpx; height: 360rpx; margin-bottom: 24rpx; border-radius: 24rpx; overflow: hidden; background-color: #F8F8F8; }
+.modal-image { width: 420rpx; height: 360rpx; }
+.modal-meta { align-items: center; margin-bottom: 24rpx; }
+.modal-meta-text { margin-bottom: 6rpx; font-size: 22rpx; color: #666666; }
+.modal-select-btn { width: 280rpx; height: 72rpx; border-radius: 36rpx; background-color: #00C853; align-items: center; justify-content: center; }
+.modal-select-btn.selected { background-color: #999999; }
+.modal-select-text { font-size: 28rpx; font-weight: 600; color: #FFFFFF; }
+</style>

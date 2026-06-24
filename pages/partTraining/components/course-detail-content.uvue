@@ -1,0 +1,149 @@
+<template>
+	<view class="course-detail" :class="{ embedded: isEmbedded }">
+		<view v-if="showPageHeader" class="header">
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
+			<text class="header-title">{{ course.title }}</text>
+		</view>
+		<view class="content">
+			<view class="cover-card">
+				<view class="cover-section">
+					<image class="cover-image" :src="course.cover" mode="aspectFill" />
+					<view class="cover-overlay"></view>
+					<view v-if="showCourseIntroCard" class="intro-card">
+						<view class="intro-line"></view>
+						<text class="intro-title">课程简介</text>
+						<text class="intro-text" :number-of-lines="3">{{ course.intro }}</text>
+					</view>
+					<view class="tags-duration-overlay">
+						<view class="tags-wrap">
+							<text v-for="tag in course.tags" :key="tag" class="tag-item">{{ tag }}</text>
+						</view>
+						<text class="duration-text">{{ course.duration }}</text>
+					</view>
+				</view>
+			</view>
+			<view class="bottom-content">
+				<view class="notice-card">
+					<view class="notice-header">
+						<view class="notice-icon"><text class="notice-icon-text">!</text></view>
+						<text class="notice-title">注意事项</text>
+					</view>
+					<view class="notice-list">
+						<view v-for="(notice, index) in course.noticeList" :key="notice" class="notice-item">
+							<text class="notice-number">{{ index + 1 }}.</text>
+							<text class="notice-content">{{ notice }}</text>
+						</view>
+					</view>
+				</view>
+				<view class="preview-section">
+					<text class="preview-title">动作预览</text>
+					<view class="preview-list">
+						<view v-for="preview in previewItems" :key="preview.id" class="preview-item">
+							<image class="preview-image" :src="preview.cover" mode="aspectFill" />
+							<text class="preview-name" :number-of-lines="1">{{ preview.name }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+		<view class="bottom-bar">
+			<view class="start-btn" @click="startTraining">
+				<text class="start-btn-text">开始训练</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import { PartTrainingCourse, TrainingPreview } from '@/pages/partTraining/course-data.uts'
+
+const props = defineProps<{
+	course: PartTrainingCourse
+	showHeader?: boolean
+	showIntroCard?: boolean
+	embedded?: boolean
+}>()
+const emit = defineEmits(['start', 'back'])
+
+const previewItems = computed<TrainingPreview[]>(() => props.course.previews.slice(0, 4))
+const showPageHeader = computed<boolean>(() => props.showHeader == false ? false : true)
+const showCourseIntroCard = computed<boolean>(() => props.showIntroCard == false ? false : true)
+const isEmbedded = computed<boolean>(() => props.embedded == true ? true : false)
+
+function startTraining() {
+	if (isEmbedded.value) {
+		emit('start', props.course)
+		return
+	}
+	uni.navigateTo({ url: '/pages/partTraining/adjust-equipment?id=' + props.course.id.toString() })
+}
+
+function handleBack() {
+	emit('back')
+}
+</script>
+
+<style>
+.course-detail { position: relative; width: 750rpx; height: 100%; background-color: #F5F5F5; display: flex; flex-direction: column; overflow: hidden; }
+.course-detail.embedded { width: 576rpx; height: 100%; background-color: transparent; display: flex; flex-direction: column; overflow: hidden; }
+.header { position: relative; height: 88rpx; padding: 0 24rpx; background-color: #F5F5F5; align-items: center; justify-content: center; }
+.back-btn-position { position: absolute; left: 24rpx; top: 9rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; text-align: center; }
+.content { flex: 1; padding: 0 24rpx 120rpx; overflow: hidden; }
+.cover-card { margin-top: 12rpx; margin-bottom: 16rpx; flex-shrink: 0; }
+.cover-section { position: relative; width: 702rpx; height: 386rpx; border-radius: 20rpx; overflow: hidden; box-shadow: 0 6rpx 20rpx rgba(0,0,0,0.1); }
+.cover-image { width: 702rpx; height: 386rpx; }
+.cover-overlay { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.08); }
+.intro-card { position: absolute; right: 24rpx; top: 128rpx; width: 160rpx; padding: 10rpx; background-color: rgba(255,255,255,0.58); border-radius: 12rpx; box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.1); }
+.intro-line { width: 40rpx; height: 5rpx; background-color: #FF6B6B; border-radius: 3rpx; align-self: center; }
+.intro-title { margin-top: 4rpx; font-size: 18rpx; font-weight: 600; color: #333333; text-align: center; }
+.intro-text { margin-top: 4rpx; font-size: 12rpx; line-height: 18rpx; color: #666666; text-align: center; }
+.tags-duration-overlay { position: absolute; left: 10rpx; right: 10rpx; bottom: 10rpx; padding: 10rpx; border-radius: 20rpx; background-color: rgba(255,255,255,0.42); display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.tags-wrap { flex: 1; display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; }
+.tag-item { margin-right: 16rpx; font-size: 20rpx; color: #ffffff; font-weight: 600; }
+.duration-text { margin-left: 12rpx; font-size: 22rpx; font-weight: 700; color: #FF6B35; }
+.bottom-content { flex: 1; min-height: 0; overflow: hidden; }
+.notice-card { margin-bottom: 12rpx; padding: 20rpx; background-color: #ffffff; border-radius: 20rpx; box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06); }
+.notice-header { display: flex; flex-direction: row; align-items: center; margin-bottom: 12rpx; }
+.notice-icon { width: 32rpx; height: 32rpx; border-width: 3rpx; border-style: solid; border-color: #FF6B6B; border-radius: 16rpx; align-items: center; justify-content: center; margin-right: 10rpx; }
+.notice-icon-text { font-size: 20rpx; font-weight: 700; color: #FF6B6B; }
+.notice-title { font-size: 24rpx; font-weight: 700; color: #333333; }
+.notice-item { display: flex; flex-direction: row; align-items: flex-start; margin-bottom: 8rpx; }
+.notice-number { font-size: 20rpx; font-weight: 600; color: #FF6B6B; margin-right: 6rpx; }
+.notice-content { flex: 1; font-size: 20rpx; line-height: 30rpx; color: #555555; }
+.preview-section { flex: 1; min-height: 0; }
+.preview-title { font-size: 24rpx; font-weight: 700; color: #333333; margin-bottom: 12rpx; }
+.preview-list { display: flex; flex-direction: row; }
+.preview-item { flex: 1; margin-right: 12rpx; align-items: center; }
+.preview-image { width: 156rpx; height: 156rpx; border-radius: 12rpx; background-color: #F0F0F0; margin-bottom: 6rpx; }
+.preview-name { width: 156rpx; font-size: 18rpx; color: #555555; text-align: center; }
+.bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 16rpx 24rpx 24rpx; background-color: #F5F5F5; }
+.start-btn { width: 702rpx; height: 72rpx; border-radius: 36rpx; background-color: #4CAF50; align-items: center; justify-content: center; box-shadow: 0 4rpx 16rpx rgba(76,175,80,0.3); }
+.start-btn-text { font-size: 28rpx; font-weight: 700; color: #ffffff; }
+.course-detail.embedded .content { width: 576rpx; flex: 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.course-detail.embedded .cover-card { margin-top: 0; margin-bottom: 12rpx; }
+.course-detail.embedded .cover-section { width: 576rpx; height: 259rpx; border-radius: 18rpx; box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.08); }
+.course-detail.embedded .cover-image { width: 576rpx; height: 259rpx; }
+.course-detail.embedded .tags-duration-overlay { left: 8rpx; right: 8rpx; bottom: 8rpx; padding: 8rpx 10rpx; border-radius: 16rpx; }
+.course-detail.embedded .tag-item { margin-right: 10rpx; font-size: 19rpx; }
+.course-detail.embedded .duration-text { font-size: 21rpx; }
+.course-detail.embedded .notice-card { margin-bottom: 12rpx; padding: 16rpx 18rpx; border-radius: 18rpx; }
+.course-detail.embedded .notice-header { margin-bottom: 10rpx; }
+.course-detail.embedded .notice-icon { width: 28rpx; height: 28rpx; border-radius: 14rpx; margin-right: 8rpx; }
+.course-detail.embedded .notice-icon-text { font-size: 16rpx; }
+.course-detail.embedded .notice-title { font-size: 23rpx; }
+.course-detail.embedded .notice-item { margin-bottom: 6rpx; }
+.course-detail.embedded .notice-number { font-size: 19rpx; }
+.course-detail.embedded .notice-content { font-size: 19rpx; line-height: 26rpx; }
+.course-detail.embedded .bottom-content { width: 576rpx; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.course-detail.embedded .preview-title { font-size: 23rpx; margin-bottom: 10rpx; }
+.course-detail.embedded .preview-section { flex: none; min-height: 0; }
+.course-detail.embedded .preview-list { display: flex; flex-direction: row; }
+.course-detail.embedded .preview-item { width: 136rpx; margin-right: 10rpx; align-items: center; }
+.course-detail.embedded .preview-image { width: 136rpx; height: 98rpx; margin-bottom: 5rpx; }
+.course-detail.embedded .preview-name { width: 136rpx; font-size: 17rpx; }
+.course-detail.embedded .bottom-bar { position: relative; left: auto; right: auto; bottom: auto; padding: 16rpx 0 0; background-color: transparent; }
+.course-detail.embedded .start-btn { width: 576rpx; height: 66rpx; border-radius: 33rpx; }
+.course-detail.embedded .start-btn-text { font-size: 27rpx; }
+</style>

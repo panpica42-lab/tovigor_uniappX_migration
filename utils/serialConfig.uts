@@ -1,0 +1,25 @@
+export type MotorSerialSideConfig = {
+	path: string
+	baudRate: number
+}
+
+export type MotorSerialPortsConfig = {
+	left: MotorSerialSideConfig
+	right: MotorSerialSideConfig
+}
+
+export const MOTOR_BAUD_RATE = 115200
+
+export const MOTOR_SERIAL_PORTS: MotorSerialPortsConfig = {
+	left: {
+		path: '/dev/ttyS6',
+		baudRate: MOTOR_BAUD_RATE
+	},
+	right: {
+		path: '/dev/ttyS8',
+		baudRate: MOTOR_BAUD_RATE
+	}
+}
+
+// Legacy primary path for older debug controls. The runtime now opens both sides.
+export const MOTOR_SERIAL_PATH = MOTOR_SERIAL_PORTS.left.path

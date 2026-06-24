@@ -1,0 +1,335 @@
+<template>
+	<view class="page">
+		<view class="nav-bar">
+			<image class="back-btn" src="/static/icons/general/btn_general_back.svg" mode="aspectFit" @click="goBack" />
+			<text class="nav-title">{{ pageTitle }}</text>
+			<view class="nav-placeholder"></view>
+		</view>
+
+		<view class="stat-board">
+			<image class="board-bg" src="/static/icons/freeTrainingActivity/bg_statBoard.png" mode="aspectFill" />
+			<view class="stat-row">
+				<view class="stat-item">
+					<image class="stat-icon" src="/static/icons/freeTrainingActivity/ic_counts.png" mode="aspectFit" />
+					<view class="stat-copy"><text class="stat-label">组数/次数</text><text class="stat-value">{{ setsText }}</text></view>
+				</view>
+				<image class="separator" src="/static/icons/freeTrainingActivity/ic_separate.png" mode="aspectFit" />
+				<view class="stat-item">
+					<image class="stat-icon" src="/static/icons/freeTrainingActivity/ic_train_time.png" mode="aspectFit" />
+					<view class="stat-copy"><text class="stat-label">训练时间</text><text class="stat-value">{{ durationText }}</text></view>
+				</view>
+				<image class="separator" src="/static/icons/freeTrainingActivity/ic_separate.png" mode="aspectFit" />
+				<view class="stat-item">
+					<image class="stat-icon" src="/static/icons/freeTrainingActivity/ic_calories.png" mode="aspectFit" />
+					<view class="stat-copy"><text class="stat-label">千卡(kcal)</text><text class="stat-value">{{ caloriesText }}</text></view>
+				</view>
+			</view>
+		</view>
+
+		<view class="curve-panel">
+			<view class="curve-head">
+				<view>
+					<text class="curve-title">拉绳长度</text>
+				</view>
+				<view class="metric"><text class="metric-value">{{ distanceMetricText }}</text></view>
+			</view>
+			<ForceRealtimeBars :values="historyDistances" :live-value="liveDistance" :max-value="80" :slot-count="12" />
+		</view>
+
+		<view class="control-center">
+			<FreePowerDial
+				:value="forceValue"
+				:min="5"
+				:max="55"
+				:powerOn="powerOn"
+				:pending="pendingAction.length > 0"
+				:pendingText="pendingText"
+				:modeName="currentMode.shortName"
+				:disabled="controlDisabled"
+				@changing="handleForceChanging"
+				@change="handleForceChange"
+				@requestPower="handlePowerRequest"
+			/>
+		</view>
+
+		<view class="bottom-slot">
+			<view v-if="powerOn" class="power-curve-panel">
+				<view class="power-curve-head">
+					<text class="power-curve-title">Power</text>
+					<text class="power-curve-value">{{ activePowerText }}</text>
+				</view>
+				<view class="power-curve-chart">
+					<PowerRealtimeLine :values="powerSamples" :max-abs-value="POWER_CHART_MAX_W" :slot-count="POWER_SAMPLE_LIMIT" />
+				</view>
+			</view>
+			<view v-else class="bottom-panel">
+			<view class="mode-label"><text class="mode-label-text">模式</text><text class="mode-label-text">选择</text></view>
+			<view class="mode-grid">
+				<view class="mode-item" v-for="(mode, index) in modes" :key="mode.key" :class="{ selected: selectedMode == index }" @click="selectMode(index)">
+					<image class="mode-icon" :src="mode.icon" mode="aspectFit" />
+					<text class="mode-name">{{ mode.shortName }}</text>
+				</view>
+			</view>
+			</view>
+		</view>
+
+		<view v-if="showSafetyModal" class="modal-mask">
+			<view class="modal-card">
+				<text class="modal-title">训练安全须知</text>
+				<text class="modal-item">1. 进行力量训练前，请先进行基础热身</text>
+				<text class="modal-item">2. 使用力量力臂进行训练前，请确认力臂档位已锁好</text>
+				<text class="modal-item">3. 请勿将整个人或其他重物挂在力臂上</text>
+				<text class="modal-item">4. 请勿用硬物击打设备屏幕</text>
+				<text class="modal-item">5. 结束训练后，请及时将力臂还原至初始状态并锁好</text>
+				<view class="modal-confirm" @click="closeSafetyModal"><text class="modal-confirm-text">我知道了</text></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import FreePowerDial from '@/components/training/free-power-dial.uvue'
+import ForceRealtimeBars from '@/components/training/force-realtime-bars.uvue'
+import PowerRealtimeLine from '@/components/training/power-realtime-line.uvue'
+import { FreeTrainingMode, freeTrainingModes, getFreeTrainingMode } from './action-data.uts'
+import { RuntimeStatus, SerialFrame, getStatus, onFrame, offFrame, onStatus, offStatus, startWorking, stopForce, updateWorkingForce } from '@/utils/serialRuntime.uts'
+
+const PENDING_LOCK_MS = 800
+const SPEED_THRESHOLD = 10
+const IDLE_WINDOW_MS = 2000
+const POWER_SAMPLE_LIMIT = 60
+const POWER_CHART_MAX_W = 500
+const modes = ref<FreeTrainingMode[]>(freeTrainingModes)
+const selectedMode = ref(0)
+const forceValue = ref(15)
+const powerOn = ref(false)
+const pendingAction = ref('')
+const setCount = ref(0)
+const repCount = ref(0)
+const activeSeconds = ref(0)
+const calories = ref(0)
+const historyDistances = ref<number[]>([])
+const liveDistance = ref(0)
+const powerSamples = ref<number[]>([])
+const activePower = ref(0)
+const runtimeStatus = ref<RuntimeStatus>(getStatus())
+const showSafetyModal = ref(true)
+let pendingTimer = 0
+let activeTimer = 0
+let countBaseline = 0
+let needCaptureBaseline = false
+let lastSportCount = -1
+let lastActiveTs = 0
+
+function pad2(value: number): string { return value < 10 ? '0' + value.toString() : value.toString() }
+function formatTime(totalSeconds: number): string {
+	return pad2(Math.floor(totalSeconds / 3600)) + ':' + pad2(Math.floor((totalSeconds % 3600) / 60)) + ':' + pad2(totalSeconds % 60)
+}
+function toDistanceCm(distance: number): number { return Math.max(0, distance) / 10 }
+function clearPendingTimer() {
+	if (pendingTimer != 0) {
+		clearTimeout(pendingTimer)
+		pendingTimer = 0
+	}
+	pendingAction.value = ''
+}
+function lockControls(action: string) {
+	clearPendingTimer()
+	pendingAction.value = action
+	pendingTimer = setTimeout(() => {
+		pendingTimer = 0
+		pendingAction.value = ''
+	}, PENDING_LOCK_MS)
+}
+function startActiveTimer() {
+	if (activeTimer != 0) clearInterval(activeTimer)
+	activeTimer = setInterval(() => {
+		if (lastActiveTs > 0 && Date.now() - lastActiveTs < IDLE_WINDOW_MS) activeSeconds.value += 1
+	}, 1000)
+}
+function stopActiveTimer() {
+	if (activeTimer != 0) {
+		clearInterval(activeTimer)
+		activeTimer = 0
+	}
+}
+function currentModeValue(): FreeTrainingMode {
+	return modes.value[selectedMode.value]
+}
+function stopPowerForLeave() {
+	if (powerOn.value || pendingAction.value == 'opening') {
+		stopForce(800, 200)
+	}
+	powerOn.value = false
+	stopActiveTimer()
+	clearPendingTimer()
+}
+
+const currentMode = computed<FreeTrainingMode>(() => currentModeValue())
+const pageTitle = computed<string>(() => currentMode.value.title)
+const controlDisabled = computed<boolean>(() => pendingAction.value.length > 0)
+const pendingText = computed<string>(() => {
+	if (pendingAction.value == 'opening') return '启动中'
+	if (pendingAction.value == 'closing') return '关闭中'
+	return powerOn.value ? '训练中' : ''
+})
+const setsText = computed<string>(() => pad2(setCount.value) + '/' + pad2(repCount.value))
+const durationText = computed<string>(() => formatTime(activeSeconds.value))
+const caloriesText = computed<string>(() => (calories.value / 1000).toFixed(2))
+const distanceMetricText = computed<string>(() => {
+	if (liveDistance.value > 0) return liveDistance.value.toFixed(1) + 'cm'
+	if (historyDistances.value.length == 0) return '--'
+	return historyDistances.value[historyDistances.value.length - 1].toFixed(1) + 'cm'
+})
+const activePowerText = computed<string>(() => activePower.value.toString() + 'W')
+
+function applyForceValue(value: number) {
+	if (forceValue.value == value) return
+	forceValue.value = value
+	if (powerOn.value) updateWorkingForce(forceValue.value, currentMode.value.forceMode)
+}
+
+function handleForceChange(value: number) {
+	applyForceValue(value)
+}
+
+function handleForceChanging(value: number) {
+	applyForceValue(value)
+}
+
+function deviceUnavailableText(): string {
+	if (runtimeStatus.value.debugMode) return 'UI调试模式：已跳过串口连接'
+	if (runtimeStatus.value.connecting) return '设备连接中，请稍候'
+	if (runtimeStatus.value.lastError.length > 0) return '设备未连接：' + runtimeStatus.value.lastError
+	return '设备未连接'
+}
+
+function handlePowerRequest(nextPowerOn: boolean) {
+	if (controlDisabled.value) return
+	if (nextPowerOn) {
+		if (!runtimeStatus.value.connected) {
+			const message = deviceUnavailableText()
+			console.log('[free-training] power request blocked: ' + message)
+			uni.showToast({ title: message, icon: 'none' })
+			return
+		}
+		powerOn.value = true
+		lockControls('opening')
+		setCount.value += 1
+		needCaptureBaseline = true
+		lastSportCount = -1
+		liveDistance.value = 0
+		powerSamples.value = []
+		activePower.value = 0
+		startActiveTimer()
+		startWorking(forceValue.value, currentMode.value.forceMode, 200)
+		return
+	}
+	powerOn.value = false
+	lockControls('closing')
+	stopActiveTimer()
+	stopForce(800, 200)
+}
+
+function selectMode(index: number) {
+	if (controlDisabled.value || selectedMode.value == index) return
+	selectedMode.value = index
+	if (powerOn.value) updateWorkingForce(forceValue.value, currentMode.value.forceMode)
+}
+
+function handleFrame(frame: SerialFrame) {
+	if (needCaptureBaseline) {
+		countBaseline = frame.sportCount
+		needCaptureBaseline = false
+	}
+	const currentCount = Math.max(0, frame.sportCount - countBaseline)
+	repCount.value = currentCount
+	calories.value = frame.calories
+	if (Math.abs(frame.left.speed) > SPEED_THRESHOLD || Math.abs(frame.right.speed) > SPEED_THRESHOLD) lastActiveTs = Date.now()
+	const nextPower = Math.abs(frame.left.power) >= Math.abs(frame.right.power) ? frame.left.power : frame.right.power
+	activePower.value = nextPower
+	if (powerOn.value) {
+		const nextSamples = [...powerSamples.value, nextPower]
+		powerSamples.value = nextSamples.slice(Math.max(0, nextSamples.length - POWER_SAMPLE_LIMIT))
+	}
+	const currentDistance = Math.max(toDistanceCm(frame.left.distance), toDistanceCm(frame.right.distance))
+	if (currentDistance >= 4) liveDistance.value = Math.max(liveDistance.value, currentDistance)
+	if (lastSportCount < 0) lastSportCount = frame.sportCount
+	if (frame.sportCount > lastSportCount) {
+		if (liveDistance.value > 0) historyDistances.value = [...historyDistances.value, liveDistance.value]
+		liveDistance.value = 0
+		lastSportCount = frame.sportCount
+	}
+}
+
+function handleStatus(status: RuntimeStatus) { runtimeStatus.value = status }
+function closeSafetyModal() { showSafetyModal.value = false }
+function goBack() {
+	stopPowerForLeave()
+	uni.navigateBack()
+}
+
+onLoad((options: OnLoadOptions) => {
+	if (options['modeKey'] != null) {
+		const mode = getFreeTrainingMode(`${options['modeKey']}`)
+		const index = modes.value.findIndex((item: FreeTrainingMode): boolean => item.key == mode.key)
+		if (index >= 0) selectedMode.value = index
+	}
+})
+onMounted(() => {
+	runtimeStatus.value = getStatus()
+	onFrame(handleFrame)
+	onStatus(handleStatus)
+})
+onHide(() => { stopPowerForLeave() })
+onBeforeUnmount(() => {
+	offFrame(handleFrame)
+	offStatus(handleStatus)
+	stopPowerForLeave()
+})
+</script>
+
+<style>
+.page { height: 100%; padding: 0 40rpx 40rpx; background-color: #FFFFFF; overflow: hidden; }
+.nav-bar { height: 100rpx; padding-top: 20rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 56rpx; height: 56rpx; }
+.nav-title { font-size: 36rpx; font-weight: 700; color: #333333; }
+.nav-placeholder { width: 56rpx; height: 56rpx; }
+.stat-board { position: relative; height: 160rpx; margin-top: 8rpx; border-radius: 24rpx; overflow: hidden; border-width: 3rpx; border-style: solid; border-color: #D0D0D0; }
+.board-bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.stat-row { position: relative; height: 100%; padding: 0 26rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.stat-item { flex-direction: row; align-items: center; }
+.stat-icon { width: 56rpx; height: 56rpx; margin-right: 14rpx; }
+.stat-copy { justify-content: center; }
+.stat-label { font-size: 22rpx; color: #666666; }
+.stat-value { margin-top: 4rpx; font-size: 30rpx; font-weight: 700; color: #000000; }
+.separator { width: 2rpx; height: 78rpx; }
+.curve-panel { height: 262rpx; margin-top: 20rpx; padding: 18rpx 22rpx 14rpx; border-radius: 24rpx; border-width: 3rpx; border-style: solid; border-color: #D0D0D0; }
+.curve-head { flex-direction: row; align-items: flex-start; justify-content: space-between; margin-bottom: 8rpx; }
+.curve-title { font-size: 30rpx; font-weight: 700; color: #1F2937; }
+.metric { align-items: flex-end; }
+.metric-value { font-size: 30rpx; font-weight: 700; color: #111827; }
+.control-center { flex: 1; min-height: 0; align-items: center; justify-content: center; }
+.bottom-slot { flex-shrink: 0; height: 112rpx; }
+.bottom-panel { height: 112rpx; padding: 16rpx 22rpx; border-radius: 50rpx; background-color: #F5F5F5; flex-direction: row; align-items: center; box-sizing: border-box; }
+.bottom-panel-hidden { opacity: 0; }
+.power-curve-panel { height: 112rpx; padding: 10rpx 16rpx 12rpx; border-radius: 24rpx; background-color: #F5F5F5; box-sizing: border-box; }
+.power-curve-head { height: 28rpx; margin-bottom: 6rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.power-curve-chart { flex: 1; min-height: 0; }
+.power-curve-title { font-size: 22rpx; font-weight: 700; color: #334155; }
+.power-curve-value { font-size: 22rpx; font-weight: 700; color: #0F766E; }
+.mode-label { width: 80rpx; height: 80rpx; margin-right: 16rpx; border-radius: 40rpx; background-color: #8BC34A; align-items: center; justify-content: center; }
+.mode-label-text { font-size: 23rpx; font-weight: 700; color: #FFFFFF; line-height: 28rpx; }
+.mode-grid { flex: 1; flex-direction: row; align-items: center; justify-content: space-between; }
+.mode-item { min-width: 72rpx; padding: 8rpx 10rpx; border-radius: 16rpx; align-items: center; }
+.mode-item.selected { background-color: #8BC34A; }
+.mode-icon { width: 46rpx; height: 46rpx; }
+.mode-name { margin-top: 4rpx; font-size: 20rpx; color: #666666; }
+.mode-item.selected .mode-name { color: #FFFFFF; }
+.modal-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 99; background-color: rgba(0,0,0,0.55); align-items: center; justify-content: center; }
+.modal-card { width: 600rpx; padding: 40rpx; border-radius: 24rpx; background-color: #FFFFFF; }
+.modal-title { margin-bottom: 24rpx; text-align: center; font-size: 36rpx; font-weight: 700; color: #333333; }
+.modal-item { margin-bottom: 8rpx; font-size: 26rpx; line-height: 44rpx; color: #555555; }
+.modal-confirm { height: 82rpx; margin-top: 24rpx; border-radius: 41rpx; background-color: #4CAF50; align-items: center; justify-content: center; }
+.modal-confirm-text { font-size: 30rpx; font-weight: 700; color: #FFFFFF; }
+</style>

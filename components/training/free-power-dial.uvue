@@ -1,0 +1,396 @@
+<template>
+	<view class="dial-wrap" :class="{ 'dial-wrap-pending': pending }">
+		<view
+			id="freePowerDialStage"
+			class="dial-stage"
+			@touchstart="handleDialTouchStart"
+			@touchmove="handleDialTouchMove"
+			@touchend="handleDialTouchEnd"
+			@touchcancel="handleDialTouchCancel"
+		>
+			<image class="dial-decoration" src="/static/icons/freeTrainingActivity/ic_decoration.png" mode="aspectFit" />
+			<canvas id="freePowerDialCanvas" class="dial-canvas" type="2d" :disable-scroll="true"></canvas>
+			<view
+				class="dial-center"
+				:class="{ 'dial-center-on': powerOn }"
+			>
+				<text v-if="pendingText.length > 0" class="power-state">{{ pendingText }}</text>
+				<view class="center-copy">
+					<text class="mode-name">{{ modeName }}</text>
+					<text class="weight-text">{{ displayValueText }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const props = defineProps<{
+	value: number
+	min: number
+	max: number
+	powerOn: boolean
+	pending: boolean
+	pendingText: string
+	modeName: string
+	disabled: boolean
+}>()
+
+type LocalPoint = {
+	x: number
+	y: number
+}
+
+const emit = defineEmits(['changing', 'change', 'requestPower'])
+
+const CANVAS_ID = 'freePowerDialCanvas'
+const START_ANGLE_DEG = -120
+const TOTAL_ANGLE_DEG = 240
+const END_ANGLE_DEG = START_ANGLE_DEG + TOTAL_ANGLE_DEG
+const ARC_WIDTH_RATIO = 0.092
+const HIT_INNER_RATIO = 0.62
+const HIT_OUTER_RATIO = 1.28
+const CENTER_HIT_RATIO = 0.7
+const HIT_ANGLE_PADDING_DEG = 8
+const POWER_TAP_MOVE_LIMIT = 12
+
+const instance = getCurrentInstance()!.proxy
+const displayValue = ref(15)
+const canvasReady = ref(false)
+const displayValueText = computed<string>(() => displayValue.value.toString() + 'KG')
+
+let canvasEl: UniCanvasElement | null = null
+let canvasControlContext: CanvasContext | null = null
+let canvasContext: CanvasRenderingContext2D | null = null
+let canvasWidth = 0
+let canvasHeight = 0
+let canvasDpr = 1
+let isDragging = false
+let isPowerPressing = false
+let powerPressMoved = false
+let powerPressStartX = 0
+let powerPressStartY = 0
+let activeValue = 15
+let pendingTouchX = 0
+let pendingTouchY = 0
+let rafTimer = 0
+let rafUsesCanvas = false
+let initRetryTimer = 0
+
+function clamp(value: number): number {
+	return Math.max(props.min, Math.min(props.max, value))
+}
+
+function normalizeValue(value: number): number {
+	return Math.round(clamp(value))
+}
+
+function valueToRatio(value: number): number {
+	const range = props.max - props.min
+	if (range <= 0) return 0
+	return Math.max(0, Math.min(1, (value - props.min) / range))
+}
+
+function degToRad(deg: number): number {
+	return deg * Math.PI / 180
+}
+
+function polarX(centerX: number, radius: number, deg: number): number {
+	return centerX + Math.cos(degToRad(deg - 90)) * radius
+}
+
+function polarY(centerY: number, radius: number, deg: number): number {
+	return centerY + Math.sin(degToRad(deg - 90)) * radius
+}
+
+function drawArcLine(context: CanvasRenderingContext2D, centerX: number, centerY: number, radius: number, startDeg: number, endDeg: number, color: string, width: number) {
+	context.beginPath()
+	context.lineWidth = width
+	context.lineCap = 'round'
+	context.strokeStyle = color
+	context.arc(centerX, centerY, radius, degToRad(startDeg - 90), degToRad(endDeg - 90), false)
+	context.stroke()
+}
+
+function drawDial(value: number) {
+	const context = canvasContext
+	if (context == null || canvasWidth <= 0 || canvasHeight <= 0) return
+
+	const safeValue = normalizeValue(value)
+	const ratio = valueToRatio(safeValue)
+	const centerX = canvasWidth / 2
+	const centerY = canvasHeight * 0.525
+	const radius = Math.min(canvasWidth * 0.34, canvasHeight * 0.39)
+	const arcWidth = Math.max(12, canvasWidth * ARC_WIDTH_RATIO)
+	const progressEndDeg = START_ANGLE_DEG + TOTAL_ANGLE_DEG * ratio
+	const progressColor = props.disabled ? '#A7B0BA' : '#9BE13D'
+	const trackColor = '#EDF2F5'
+
+	context.clearRect(0, 0, canvasWidth, canvasHeight)
+
+	drawArcLine(context, centerX, centerY, radius, START_ANGLE_DEG, END_ANGLE_DEG, trackColor, arcWidth)
+	if (ratio > 0) {
+		drawArcLine(context, centerX, centerY, radius, START_ANGLE_DEG, progressEndDeg, progressColor, arcWidth)
+	}
+
+	const dotX = polarX(centerX, radius, progressEndDeg)
+	const dotY = polarY(centerY, radius, progressEndDeg)
+	context.beginPath()
+	context.fillStyle = props.disabled ? '#A7B0BA' : '#8CE33B'
+	context.arc(dotX, dotY, arcWidth * 0.42, 0, Math.PI * 2, false)
+	context.fill()
+	context.beginPath()
+	context.lineWidth = Math.max(2, arcWidth * 0.16)
+	context.strokeStyle = 'rgba(255,255,255,0.82)'
+	context.arc(dotX, dotY, arcWidth * 0.42, 0, Math.PI * 2, false)
+	context.stroke()
+}
+
+function syncDisplayValue(value: number) {
+	const nextValue = normalizeValue(value)
+	activeValue = nextValue
+	displayValue.value = nextValue
+}
+
+function syncFromProps() {
+	if (isDragging) return
+	syncDisplayValue(props.value)
+	drawDial(activeValue)
+}
+
+function initCanvas() {
+	uni.createCanvasContextAsync({
+		id: CANVAS_ID,
+		component: instance!,
+		success: (context: CanvasContext) => {
+			const renderingContext = context.getContext('2d')
+			if (renderingContext == null) return
+			const canvas = renderingContext.canvas
+			canvasControlContext = context
+			canvasEl = canvas
+			canvasContext = renderingContext
+			canvasDpr = uni.getWindowInfo().pixelRatio
+			canvasWidth = canvas.offsetWidth
+			canvasHeight = canvas.offsetHeight
+			if (canvasWidth <= 0 || canvasHeight <= 0) {
+				initRetryTimer = setTimeout(() => {
+					initRetryTimer = 0
+					initCanvas()
+				}, 80)
+				return
+			}
+			canvas.width = canvasWidth * canvasDpr
+			canvas.height = canvasHeight * canvasDpr
+			renderingContext.scale(canvasDpr, canvasDpr)
+			canvasReady.value = true
+			syncFromProps()
+		}
+	})
+}
+
+function clearDrawFrame() {
+	if (rafTimer != 0) {
+		const controlContext = canvasControlContext
+		if (rafUsesCanvas && controlContext != null) {
+			controlContext.cancelAnimationFrame(rafTimer)
+		} else {
+			clearTimeout(rafTimer)
+		}
+		rafTimer = 0
+	}
+	rafUsesCanvas = false
+}
+
+function clearInitRetryTimer() {
+	if (initRetryTimer != 0) {
+		clearTimeout(initRetryTimer)
+		initRetryTimer = 0
+	}
+}
+
+function localPointFromTouch(event: TouchEvent): LocalPoint | null {
+	const canvas = canvasEl
+	if (canvas == null || event.touches.length == 0) return null
+	const rect = canvas.getBoundingClientRect() as DOMRect
+	const touch = event.touches[0]
+	return {
+		x: touch.clientX - rect.left,
+		y: touch.clientY - rect.top
+	}
+}
+
+function angleFromPoint(x: number, y: number): number {
+	const centerX = canvasWidth / 2
+	const centerY = canvasHeight * 0.525
+	const dx = x - centerX
+	const dy = y - centerY
+	let angle = Math.atan2(dy, dx) * 180 / Math.PI + 90
+	if (angle > 180) angle -= 360
+	if (angle < -180) angle += 360
+	return angle
+}
+
+function valueFromPoint(x: number, y: number): number {
+	let angle = angleFromPoint(x, y)
+	angle = Math.max(START_ANGLE_DEG, Math.min(END_ANGLE_DEG, angle))
+	const ratio = (angle - START_ANGLE_DEG) / TOTAL_ANGLE_DEG
+	return normalizeValue(props.min + ratio * (props.max - props.min))
+}
+
+function isCenterPoint(x: number, y: number): boolean {
+	const centerX = canvasWidth / 2
+	const centerY = canvasHeight * 0.525
+	const radius = Math.min(canvasWidth * 0.34, canvasHeight * 0.39)
+	const dx = x - centerX
+	const dy = y - centerY
+	const dist = Math.sqrt(dx * dx + dy * dy)
+	return dist < radius * CENTER_HIT_RATIO
+}
+
+function isArcHitPoint(x: number, y: number): boolean {
+	const centerX = canvasWidth / 2
+	const centerY = canvasHeight * 0.525
+	const radius = Math.min(canvasWidth * 0.34, canvasHeight * 0.39)
+	const dx = x - centerX
+	const dy = y - centerY
+	const dist = Math.sqrt(dx * dx + dy * dy)
+	const ratio = dist / radius
+	const angle = angleFromPoint(x, y)
+	return ratio >= HIT_INNER_RATIO && ratio <= HIT_OUTER_RATIO && angle >= START_ANGLE_DEG - HIT_ANGLE_PADDING_DEG && angle <= END_ANGLE_DEG + HIT_ANGLE_PADDING_DEG
+}
+
+function emitChanging(nextValue: number) {
+	if (nextValue == activeValue) return
+	activeValue = nextValue
+	displayValue.value = nextValue
+	emit('changing', nextValue)
+}
+
+function updateFromTouch(x: number, y: number, shouldEmit: boolean) {
+	const nextValue = valueFromPoint(x, y)
+	if (shouldEmit) {
+		emitChanging(nextValue)
+	} else {
+		activeValue = nextValue
+		displayValue.value = nextValue
+	}
+	drawDial(nextValue)
+}
+
+function requestDrawFrame() {
+	if (rafTimer != 0) return
+	const controlContext = canvasControlContext
+	if (controlContext != null) {
+		rafUsesCanvas = true
+		rafTimer = controlContext.requestAnimationFrame((_timestamp: number) => {
+			rafTimer = 0
+			rafUsesCanvas = false
+			if (isDragging) {
+				updateFromTouch(pendingTouchX, pendingTouchY, true)
+			}
+		})
+		return
+	}
+	rafUsesCanvas = false
+	rafTimer = setTimeout(() => {
+		rafTimer = 0
+		if (isDragging) {
+			updateFromTouch(pendingTouchX, pendingTouchY, true)
+		}
+	}, 16)
+}
+
+function handleDialTouchStart(event: TouchEvent) {
+	if (props.disabled || !canvasReady.value) return
+	const point = localPointFromTouch(event)
+	if (point == null) return
+	event.stopPropagation()
+	if (isCenterPoint(point.x, point.y)) {
+		isPowerPressing = true
+		powerPressMoved = false
+		powerPressStartX = point.x
+		powerPressStartY = point.y
+		return
+	}
+	if (!isArcHitPoint(point.x, point.y)) return
+	isDragging = true
+	pendingTouchX = point.x
+	pendingTouchY = point.y
+	updateFromTouch(point.x, point.y, true)
+}
+
+function handleDialTouchMove(event: TouchEvent) {
+	const point = localPointFromTouch(event)
+	if (point == null) return
+	event.stopPropagation()
+	if (isPowerPressing) {
+		const dx = point.x - powerPressStartX
+		const dy = point.y - powerPressStartY
+		if (Math.sqrt(dx * dx + dy * dy) > POWER_TAP_MOVE_LIMIT) powerPressMoved = true
+		return
+	}
+	if (props.disabled || !isDragging) return
+	pendingTouchX = point.x
+	pendingTouchY = point.y
+	requestDrawFrame()
+}
+
+function handleDialTouchEnd(event: TouchEvent) {
+	if (isPowerPressing) {
+		event.stopPropagation()
+		if (!powerPressMoved && !props.disabled) emit('requestPower', !props.powerOn)
+		isPowerPressing = false
+		powerPressMoved = false
+		return
+	}
+	if (!isDragging) return
+	event.stopPropagation()
+	clearDrawFrame()
+	updateFromTouch(pendingTouchX, pendingTouchY, true)
+	isDragging = false
+	emit('change', activeValue)
+}
+
+function handleDialTouchCancel(event: TouchEvent) {
+	if (isPowerPressing || isDragging) event.stopPropagation()
+	clearDrawFrame()
+	isDragging = false
+	isPowerPressing = false
+	powerPressMoved = false
+}
+
+onUpdated(() => {
+	syncFromProps()
+})
+
+onMounted(() => {
+	syncDisplayValue(props.value)
+	nextTick(() => {
+		initCanvas()
+	})
+})
+
+onBeforeUnmount(() => {
+	clearDrawFrame()
+	clearInitRetryTimer()
+	isDragging = false
+	isPowerPressing = false
+	canvasEl = null
+	canvasControlContext = null
+	canvasContext = null
+})
+</script>
+
+<style>
+.dial-wrap { width: 100%; margin-top: 8rpx; align-items: center; justify-content: center; }
+.dial-wrap-pending { opacity: 0.68; }
+.dial-stage { position: relative; width: 640rpx; height: 430rpx; align-items: center; justify-content: center; }
+.dial-decoration { position: absolute; left: 0; bottom: -28rpx; z-index: 1; width: 640rpx; height: 461rpx; opacity: 1; }
+.dial-canvas { position: absolute; left: 120rpx; top: 16rpx; z-index: 2; width: 400rpx; height: 320rpx; }
+.dial-center { position: absolute; left: 220rpx; top: 84rpx; z-index: 4; width: 200rpx; height: 200rpx; border-radius: 100rpx; background-color: #FFFFFF; border-width: 8rpx; border-style: solid; border-color: #F2F5F7; align-items: center; justify-content: center; box-shadow: 0 18rpx 34rpx rgba(43, 92, 83, 0.16); }
+.dial-center-on { border-color: #F2F5F7; }
+.center-copy { align-items: center; justify-content: center; }
+.power-state { position: absolute; left: 0; right: 0; top: 24rpx; z-index: 2; text-align: center; font-size: 18rpx; font-weight: 700; color: #74B72E; line-height: 24rpx; }
+.mode-name { font-size: 20rpx; font-weight: 600; color: #20242A; line-height: 28rpx; }
+.weight-text { margin-top: 8rpx; font-size: 42rpx; font-weight: 700; color: #101010; line-height: 48rpx; }
+</style>

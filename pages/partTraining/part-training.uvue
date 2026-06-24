@@ -1,0 +1,391 @@
+<template>
+	<view class="page">
+		<view class="header">
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
+			<text class="header-title">部位训练</text>
+		</view>
+
+		<view class="content">
+			<CourseLibrarySidebar
+				class="sidebar"
+				:genderValues="filterGenderValues"
+				:goalValues="filterGoalValues"
+				:levelValues="filterLevelValues"
+				:partValues="filterPartValues"
+				:methodValues="filterMethodValues"
+				:durationValues="filterDurationValues"
+				:equipmentValues="filterEquipmentValues"
+				:coachValues="filterCoachValues"
+				:hasPendingChanges="hasPendingFilterChanges"
+				:hasAppliedFilters="hasAppliedCourseFilters"
+				:filterCount="filterButtonCount"
+				@changeFilter="handleFilterChange"
+				@selectCoach="handleCoachSelect"
+				@applyFilters="handleApplyFilters"
+				@goActionLibrary="handleGoActionLibrary"
+				@openAiRecommend="handleOpenAiRecommend"
+			/>
+
+			<view class="main-column">
+				<view class="search-bar">
+					<view class="search-box">
+						<view class="search-icon"></view>
+						<input class="search-input" type="text" placeholder="搜索训练课程..." :placeholder-style="'color: #B0B0B0; font-size: 24rpx;'" confirm-type="search" @confirm="handleSearchConfirm" />
+					</view>
+				</view>
+
+				<scroll-view class="course-scroll" scroll-y="true" :show-scrollbar="false" :style="{ height: courseScrollHeight + 'px' }" @scrolltolower="loadMoreVisibleCourses">
+					<view class="course-grid">
+						<view v-for="(course, index) in visibleCourses" :key="course.id" class="course-item" :class="{ left: index % 2 == 0 }">
+							<TrainingCourseCard :course="course" @click="handleCourseClick" @play="handleCoursePlay" />
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
+
+		<AiRecommendModal v-if="showAiRecommendModal" :visible="showAiRecommendModal" @close="closeAiRecommend" @start="handleStartAiRecommend" />
+		<AiRecommendResultModal v-if="showAiRecommendResultModal" :visible="showAiRecommendResultModal" :course="displayRecommendedCourse" @close="closeAiRecommendResult" @startTraining="handleStartRecommendedCourse" />
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import CourseLibrarySidebar from '@/components/ui-box/CourseLibrarySidebar.uvue'
+import TrainingCourseCard from '@/components/course-list/training-course-card.uvue'
+import AiRecommendModal from '@/components/modals/ai-recommend-modal.uvue'
+import AiRecommendResultModal from '@/components/modals/ai-recommend-result-modal.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
+import { partTrainingCourses, PartTrainingCourse, AiRecommendForm } from './course-data.uts'
+import { getSelectedCoach } from '@/utils/coachManager.uts'
+
+let navTraceTs = 0
+const setupTraceTs = Date.now()
+const STAGGER_INITIAL_VISIBLE_COURSE_COUNT = 1
+const READY_VISIBLE_COURSE_COUNT = 8
+const LOAD_MORE_COURSE_COUNT = 4
+const COURSE_REVEAL_INTERVAL_MS = 45
+
+function tracePartTraining(label: string) {
+	const now = Date.now()
+	const delta = navTraceTs > 0 ? now - navTraceTs : -1
+	console.log('[PartTrainingTrace] part-training ' + label + ' now=' + now.toString() + ' deltaFromClick=' + delta.toString() + 'ms')
+}
+
+console.log('[PartTrainingTrace] part-training setup start now=' + setupTraceTs.toString() + ' deltaFromClick=-1ms')
+
+type CourseFilterState = {
+	gender: string[]
+	goal: string[]
+	level: string[]
+	part: string[]
+	method: string[]
+	duration: string[]
+	equipment: string[]
+}
+
+function createFilterState(): CourseFilterState {
+	return { gender: [], goal: [], level: [], part: [], method: [], duration: [], equipment: [] }
+}
+
+function cloneFilters(source: CourseFilterState): CourseFilterState {
+	return {
+		gender: [...source.gender],
+		goal: [...source.goal],
+		level: [...source.level],
+		part: [...source.part],
+		method: [...source.method],
+		duration: [...source.duration],
+		equipment: [...source.equipment]
+	}
+}
+
+function valuesFor(source: CourseFilterState, key: string): string[] {
+	if (key == 'gender') return source.gender
+	if (key == 'goal') return source.goal
+	if (key == 'level') return source.level
+	if (key == 'part') return source.part
+	if (key == 'method') return source.method
+	if (key == 'duration') return source.duration
+	return source.equipment
+}
+
+function setValuesFor(source: CourseFilterState, key: string, values: string[]) {
+	if (key == 'gender') source.gender = values
+	if (key == 'goal') source.goal = values
+	if (key == 'level') source.level = values
+	if (key == 'part') source.part = values
+	if (key == 'method') source.method = values
+	if (key == 'duration') source.duration = values
+	if (key == 'equipment') source.equipment = values
+}
+
+function arrayEqual(left: string[], right: string[]): boolean {
+	if (left.length != right.length) return false
+	for (let i = 0; i < left.length; i += 1) {
+		if (!right.includes(left[i])) return false
+	}
+	return true
+}
+
+function filtersEqual(left: CourseFilterState, right: CourseFilterState): boolean {
+	return arrayEqual(left.gender, right.gender) &&
+		arrayEqual(left.goal, right.goal) &&
+		arrayEqual(left.level, right.level) &&
+		arrayEqual(left.part, right.part) &&
+		arrayEqual(left.method, right.method) &&
+		arrayEqual(left.duration, right.duration) &&
+		arrayEqual(left.equipment, right.equipment)
+}
+
+function getFilterCount(source: CourseFilterState): number {
+	return source.gender.length + source.goal.length + source.level.length + source.part.length + source.method.length + source.duration.length + source.equipment.length
+}
+
+function matchesSingleFilter(selectedValues: string[], courseValue: string): boolean {
+	if (selectedValues.length == 0) return true
+	if (courseValue == 'all') return true
+	return selectedValues.includes(courseValue)
+}
+
+function matchesArrayFilter(selectedValues: string[], courseValues: string[]): boolean {
+	if (selectedValues.length == 0) return true
+	for (let i = 0; i < courseValues.length; i += 1) {
+		if (selectedValues.includes(courseValues[i])) return true
+	}
+	return false
+}
+
+function toggleValue(values: string[], value: string): string[] {
+	const next = [...values]
+	const index = next.indexOf(value)
+	if (index >= 0) next.splice(index, 1)
+	else next.push(value)
+	return next
+}
+
+function getCourseScrollHeight(): number {
+	const systemInfo = uni.getSystemInfoSync()
+	const rpxToPx = systemInfo.windowWidth / 750
+	const fixedRpx = 96 + 20 + 96
+	const nextHeight = Math.floor(systemInfo.windowHeight - fixedRpx * rpxToPx)
+	return Math.max(240, nextHeight)
+}
+
+function getAiRecommendationScore(form: AiRecommendForm, course: PartTrainingCourse): number {
+	let score = 0
+	if (course.gender == form.gender) {
+		score += 4
+	} else if (course.gender == 'all') {
+		score += 2
+	}
+	if (course.goal == form.goal) score += 5
+	if (course.part == form.part) score += 5
+	if (course.level == form.level) score += 3
+	if (course.method == form.method) score += 2
+	return score
+}
+
+function getRecommendedCourse(form: AiRecommendForm): PartTrainingCourse | null {
+	const rankedCourses = [...partTrainingCourses].sort((left: PartTrainingCourse, right: PartTrainingCourse): number => {
+		const scoreDiff = getAiRecommendationScore(form, right) - getAiRecommendationScore(form, left)
+		if (scoreDiff != 0) return scoreDiff
+		return left.id - right.id
+	})
+	return rankedCourses.length > 0 ? rankedCourses[0] : null
+}
+
+function normalizeAiRecommendForm(payload: string): AiRecommendForm {
+	const values = payload.split('|')
+	return {
+		gender: values[0],
+		height: parseInt(values[1], 10),
+		weight: parseInt(values[2], 10),
+		goal: values[3],
+		part: values[4],
+		level: values[5],
+		method: values[6]
+	}
+}
+
+const filters = ref<CourseFilterState>(createFilterState())
+const appliedFilters = ref<CourseFilterState>(createFilterState())
+const showAiRecommendModal = ref(false)
+const showAiRecommendResultModal = ref(false)
+const recommendedCourse = ref<PartTrainingCourse | null>(null)
+const selectedCoachValues = ref<string[]>([getSelectedCoach().value])
+const courseScrollHeight = ref(getCourseScrollHeight())
+const visibleCourseLimit = ref(READY_VISIBLE_COURSE_COUNT)
+const shouldStaggerInitialCourses = ref(false)
+let revealTimer = 0
+const fallbackCourse = partTrainingCourses[0]
+const filterGenderValues = computed<string[]>(() => filters.value.gender.slice())
+const filterGoalValues = computed<string[]>(() => filters.value.goal.slice())
+const filterLevelValues = computed<string[]>(() => filters.value.level.slice())
+const filterPartValues = computed<string[]>(() => filters.value.part.slice())
+const filterMethodValues = computed<string[]>(() => filters.value.method.slice())
+const filterDurationValues = computed<string[]>(() => filters.value.duration.slice())
+const filterEquipmentValues = computed<string[]>(() => filters.value.equipment.slice())
+const filterCoachValues = computed<string[]>(() => selectedCoachValues.value.slice())
+
+const filteredCourses = computed<PartTrainingCourse[]>(() => {
+	return partTrainingCourses.filter((course: PartTrainingCourse) => {
+		return matchesSingleFilter(appliedFilters.value.gender, course.gender) &&
+			matchesSingleFilter(appliedFilters.value.goal, course.goal) &&
+			matchesSingleFilter(appliedFilters.value.level, course.level) &&
+			matchesSingleFilter(appliedFilters.value.part, course.part) &&
+			matchesSingleFilter(appliedFilters.value.method, course.method) &&
+			matchesSingleFilter(appliedFilters.value.duration, course.durationRange) &&
+			matchesArrayFilter(appliedFilters.value.equipment, course.equipment)
+	})
+})
+
+const visibleCourses = computed<PartTrainingCourse[]>(() => {
+	return filteredCourses.value.slice(0, visibleCourseLimit.value)
+})
+
+const hasPendingFilterChanges = computed<boolean>(() => !filtersEqual(filters.value, appliedFilters.value))
+const hasAppliedCourseFilters = computed<boolean>(() => getFilterCount(appliedFilters.value) > 0)
+const filterButtonCount = computed<number>(() => hasPendingFilterChanges.value ? getFilterCount(filters.value) : getFilterCount(appliedFilters.value))
+const displayRecommendedCourse = computed<PartTrainingCourse>(() => {
+	const course = recommendedCourse.value
+	return course == null ? fallbackCourse : course
+})
+
+function handleFilterChange(key: string, value: string) {
+	const next = cloneFilters(filters.value)
+	setValuesFor(next, key, toggleValue(valuesFor(next, key), value))
+	filters.value = next
+}
+
+function handleCoachSelect(coachValue: string) {
+	selectedCoachValues.value = [coachValue]
+}
+
+function revealVisibleCoursesTo(targetLimit: number) {
+	if (revealTimer > 0) {
+		clearInterval(revealTimer)
+		revealTimer = 0
+	}
+	if (visibleCourseLimit.value >= targetLimit) return
+	revealTimer = setInterval(() => {
+		if (visibleCourseLimit.value >= targetLimit) {
+			clearInterval(revealTimer)
+			revealTimer = 0
+			return
+		}
+		visibleCourseLimit.value = visibleCourseLimit.value + 1
+	}, COURSE_REVEAL_INTERVAL_MS)
+}
+
+function loadMoreVisibleCourses() {
+	const nextLimit = Math.min(filteredCourses.value.length, visibleCourseLimit.value + LOAD_MORE_COURSE_COUNT)
+	revealVisibleCoursesTo(nextLimit)
+}
+
+function handleApplyFilters() {
+	appliedFilters.value = cloneFilters(filters.value)
+	visibleCourseLimit.value = READY_VISIBLE_COURSE_COUNT
+}
+
+function handleSearchConfirm() {
+	uni.showToast({ title: '搜索功能开发中', icon: 'none' })
+}
+
+function handleCourseClick(course: PartTrainingCourse) {
+	uni.navigateTo({ url: '/pages/partTraining/course-detail-adapter?id=' + course.id.toString() })
+}
+
+function handleCoursePlay(course: PartTrainingCourse) {
+	uni.showToast({ title: '播放 ' + course.title, icon: 'none' })
+}
+
+function handleBack() {
+	navigateBackOrReLaunch('/pages/index/index')
+}
+
+function handleGoActionLibrary() {
+	uni.navigateTo({ url: '/pages/freeTraining/action-library' })
+}
+
+function handleOpenAiRecommend() {
+	showAiRecommendModal.value = true
+}
+
+function closeAiRecommend() {
+	showAiRecommendModal.value = false
+}
+
+function closeAiRecommendResult() {
+	showAiRecommendResultModal.value = false
+}
+
+function handleStartAiRecommend(payload: string) {
+	showAiRecommendModal.value = false
+	recommendedCourse.value = getRecommendedCourse(normalizeAiRecommendForm(payload))
+	if (recommendedCourse.value == null) {
+		uni.showToast({ title: '暂无可推荐课程', icon: 'none' })
+		return
+	}
+	showAiRecommendResultModal.value = true
+}
+
+function handleStartRecommendedCourse(course: PartTrainingCourse) {
+	showAiRecommendResultModal.value = false
+	uni.navigateTo({ url: '/pages/partTraining/warm-up-page?courseId=' + course.id.toString() })
+}
+
+onLoad((options: OnLoadOptions) => {
+	const traceValue = options['traceTs']
+	if (traceValue != null) {
+		const parsed = parseInt(traceValue.toString(), 10)
+		if (!isNaN(parsed)) {
+			navTraceTs = parsed
+			shouldStaggerInitialCourses.value = true
+			visibleCourseLimit.value = STAGGER_INITIAL_VISIBLE_COURSE_COUNT
+		}
+	}
+	tracePartTraining('onLoad')
+})
+
+onShow(() => {
+	tracePartTraining('onShow')
+})
+
+onMounted(() => {
+	tracePartTraining('onMounted start')
+	tracePartTraining('onMounted end')
+})
+
+onReady(() => {
+	tracePartTraining('onReady')
+	if (shouldStaggerInitialCourses.value) {
+		revealVisibleCoursesTo(Math.min(filteredCourses.value.length, READY_VISIBLE_COURSE_COUNT))
+	}
+})
+
+onUnmounted(() => {
+	if (revealTimer > 0) {
+		clearInterval(revealTimer)
+		revealTimer = 0
+	}
+})
+</script>
+
+<style>
+.page { width: 750rpx; height: 100%; background-color: #F5F5F5; display: flex; flex-direction: column; padding: 4rpx 28rpx 0 16rpx; box-sizing: border-box; overflow: hidden; }
+.header { position: relative; height: 96rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.back-btn-position { position: absolute; left: 21rpx; top: 22rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.content { flex: 1; min-height: 0; display: flex; flex-direction: row; overflow: hidden; }
+.sidebar { flex-shrink: 0; min-height: 0; margin-right: 24rpx; }
+.main-column { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.search-bar { height: 96rpx; flex-shrink: 0; }
+.search-box { height: 80rpx; padding: 0 24rpx; border-radius: 40rpx; background-color: #ffffff; display: flex; flex-direction: row; align-items: center; box-shadow: 0 6rpx 18rpx rgba(0,0,0,0.08); }
+.search-icon { width: 28rpx; height: 28rpx; border-width: 4rpx; border-style: solid; border-color: #B0B0B0; border-radius: 14rpx; margin-right: 16rpx; }
+.search-input { flex: 1; height: 80rpx; font-size: 26rpx; color: #333333; }
+.course-scroll { flex-shrink: 0; min-height: 0; overflow: hidden; }
+.course-grid { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; padding-bottom: 40rpx; }
+.course-item { width: 228rpx; margin-bottom: 24rpx; }
+.course-item.left { margin-right: 24rpx; }
+</style>

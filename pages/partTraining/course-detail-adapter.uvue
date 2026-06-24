@@ -1,0 +1,57 @@
+<template>
+	<view class="detail-page">
+		<CourseDetailContent v-if="hasCourse" :course="displayCourse" :showHeader="true" @back="handleBack" />
+		<view v-else class="loading">
+			<text class="loading-text">加载中...</text>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CourseDetailContent from './components/course-detail-content.uvue'
+import { getPartTrainingCourseById, partTrainingCourses, PartTrainingCourse } from './course-data.uts'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
+
+const course = ref<PartTrainingCourse | null>(null)
+const fallbackCourse = partTrainingCourses[0]
+const hasCourse = computed<boolean>(() => course.value != null)
+const displayCourse = computed<PartTrainingCourse>(() => {
+	const current = course.value
+	return current == null ? fallbackCourse : current
+})
+
+function loadCourse(idText: string | null) {
+	let id = 1
+	if (idText != null) {
+		const parsed = parseInt(idText, 10)
+		if (!isNaN(parsed)) id = parsed
+	}
+	const found = getPartTrainingCourseById(id)
+	if (found != null) {
+		course.value = found
+		return
+	}
+	uni.showToast({ title: '课程不存在', icon: 'none' })
+	setTimeout(() => { uni.navigateBack() }, 1500)
+}
+
+function handleBack() {
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
+}
+
+onLoad((options: OnLoadOptions) => {
+	let idText: string | null = null
+	if (options['id'] != null) {
+		idText = `${options['id']}`
+	} else if (options['courseId'] != null) {
+		idText = `${options['courseId']}`
+	}
+	loadCourse(idText)
+})
+</script>
+
+<style>
+.detail-page { width: 750rpx; height: 100%; background-color: #F5F5F5; }
+.loading { height: 100%; align-items: center; justify-content: center; }
+.loading-text { font-size: 28rpx; color: #999999; }
+</style>

@@ -1,0 +1,74 @@
+function requestAndroidPermissions(permissions: string[], rejectMessage: string): Promise<void> {
+	// #ifdef APP-ANDROID
+	return new Promise<void>((resolve, reject) => {
+		const activity = UTSAndroid.getUniActivity()
+		if (activity == null) {
+			reject(new Error(rejectMessage))
+			return
+		}
+
+		if (UTSAndroid.checkSystemPermissionGranted(activity, permissions)) {
+			resolve()
+			return
+		}
+
+		UTSAndroid.requestSystemPermission(
+			activity,
+			permissions,
+			(allRight: boolean, _grantedList: string[]) => {
+				if (allRight) {
+					resolve()
+					return
+				}
+				reject(new Error(rejectMessage))
+			},
+			(_doNotAskAgain: boolean, _grantedList: string[]) => {
+				reject(new Error(rejectMessage))
+			}
+		)
+	})
+	// #endif
+
+	return Promise.resolve()
+}
+
+function ensureAndroidManifestPermissions(permissions: string[], rejectMessage: string): Promise<void> {
+	// #ifdef APP-ANDROID
+	return new Promise<void>((resolve, reject) => {
+		const activity = UTSAndroid.getUniActivity()
+		if (activity == null) {
+			reject(new Error(rejectMessage))
+			return
+		}
+
+		if (UTSAndroid.checkSystemPermissionGranted(activity, permissions)) {
+			resolve()
+			return
+		}
+
+		reject(new Error(rejectMessage))
+	})
+	// #endif
+
+	return Promise.resolve()
+}
+
+export async function requestWifiPermissions(): Promise<void> {
+	await ensureAndroidManifestPermissions(
+		[
+			'android.permission.ACCESS_WIFI_STATE',
+			'android.permission.CHANGE_WIFI_STATE',
+			'android.permission.ACCESS_NETWORK_STATE',
+			'android.permission.CHANGE_NETWORK_STATE'
+		],
+		'当前运行基座未包含 WiFi 权限，请使用自定义基座或重新安装包含 WiFi 权限的 App'
+	)
+
+	await requestAndroidPermissions(
+		[
+			'android.permission.ACCESS_FINE_LOCATION',
+			'android.permission.ACCESS_COARSE_LOCATION'
+		],
+		'需要定位权限才能扫描附近 WiFi'
+	)
+}

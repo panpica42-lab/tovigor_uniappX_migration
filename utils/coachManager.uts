@@ -1,0 +1,67 @@
+export type CoachData = {
+	value: string
+	label: string
+	fullName: string
+	englishName: string
+	avatar: string
+	intro: string
+	tags: string[]
+	gender: string
+	badgeColor: string
+}
+
+const STORAGE_KEY = 'selected_coach'
+
+const VINCE: CoachData = {
+	value: 'vince',
+	label: 'Vince',
+	fullName: 'Vince 艾斯',
+	englishName: 'Vince Anderson',
+	avatar: '/static/icons/partTrainingActivity/AI_coach_Vince.png',
+	intro: '专业严谨型教练，擅长帮助学员突破力量瓶颈，打造强健体魄。',
+	tags: ['力量训练', '体能提升', '运动康复'],
+	gender: 'male',
+	badgeColor: '#4A90E2'
+}
+
+const VERA: CoachData = {
+	value: 'vera',
+	label: 'Vera',
+	fullName: 'Vera 维拉',
+	englishName: 'Vera Williams',
+	avatar: '/static/icons/partTrainingActivity/AI_coach_Vera.png',
+	intro: '活力鼓励型教练，深入了解女性力量训练痛点，传递热情与能量。',
+	tags: ['塑形训练', '柔韧拉伸', '体态矫正'],
+	gender: 'female',
+	badgeColor: '#F5576C'
+}
+
+const COACHES: CoachData[] = [VINCE, VERA]
+
+export function getAllCoaches(): CoachData[] {
+	return COACHES
+}
+
+export function getCoachByValue(coachValue: string): CoachData | null {
+	for (let i = 0; i < COACHES.length; i += 1) {
+		if (COACHES[i].value == coachValue) return COACHES[i]
+	}
+	return null
+}
+
+export function getSelectedCoach(): CoachData {
+	const storedValue = `${uni.getStorageSync(STORAGE_KEY)}`
+	const storedCoach = getCoachByValue(storedValue)
+	return storedCoach == null ? VINCE : storedCoach
+}
+
+export function setSelectedCoach(coachValue: string): boolean {
+	const coach = getCoachByValue(coachValue)
+	if (coach == null) return false
+	uni.setStorageSync(STORAGE_KEY, coachValue)
+	return true
+}
+
+export function clearSelectedCoach() {
+	uni.removeStorageSync(STORAGE_KEY)
+}

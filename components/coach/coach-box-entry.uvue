@@ -1,0 +1,125 @@
+<template>
+	<view class="coach-root" :style="{ width: boxWidth }" @tap="openModal" @click="openModal">
+		<view class="coach-bubble">
+			<view class="coach-header" :class="{ vera: displayCoach.value == 'vera' }" @tap="openModal" @click="openModal">
+				<text class="coach-name">{{ displayCoach.fullName }}</text>
+				<image class="coach-avatar" :src="displayCoach.avatar" mode="aspectFit" />
+			</view>
+			<view class="coach-content" :style="{ backgroundColor: contentBackgroundValue }">
+				<text class="coach-text">{{ text }}</text>
+			</view>
+		</view>
+
+		<CoachDetailModal
+			v-if="modalVisible"
+			:visible="modalVisible"
+			:coachData="displayCoach"
+			@close="closeModal"
+			@select="handleCoachSelect"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CoachDetailModal from '@/components/coach/coach-detail-modal.uvue'
+import { CoachData, getSelectedCoach, getCoachByValue, setSelectedCoach } from '@/utils/coachManager.uts'
+
+const props = defineProps<{
+	text: string
+	bubbleWidth?: string
+	contentBackground?: string
+	clickable?: boolean
+	coachData?: CoachData
+}>()
+
+const emit = defineEmits(['coach-changed', 'modal-open', 'modal-close'])
+const boxWidth = computed<string>(() => props.bubbleWidth == null ? '420rpx' : props.bubbleWidth)
+const contentBackgroundValue = computed<string>(() => props.contentBackground == null ? 'rgba(255,255,255,0.85)' : props.contentBackground)
+const currentCoach = ref<CoachData>(getSelectedCoach())
+const modalVisible = ref(false)
+
+function getDisplayCoach(): CoachData {
+	if (props.coachData != null) return props.coachData
+	return currentCoach.value
+}
+
+const displayCoach = computed<CoachData>(() => getDisplayCoach())
+
+function syncCurrentCoach() {
+	if (props.coachData != null) {
+		currentCoach.value = props.coachData
+		return
+	}
+	currentCoach.value = getSelectedCoach()
+}
+
+function openModal() {
+	if (props.clickable == false) return
+	if (modalVisible.value) return
+	console.log('[CoachBoxEntry] open coach modal')
+	syncCurrentCoach()
+	modalVisible.value = true
+	emit('modal-open')
+}
+
+function closeModal() {
+	if (modalVisible.value) emit('modal-close')
+	modalVisible.value = false
+}
+
+function handleCoachSelect(coachData: CoachData) {
+	if (!setSelectedCoach(coachData.value)) return
+	const savedCoach = getCoachByValue(coachData.value)
+	if (savedCoach != null) currentCoach.value = savedCoach
+	emit('coach-changed', currentCoach.value)
+}
+</script>
+
+<style>
+.coach-root {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+}
+.coach-bubble {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+.coach-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	margin-left: 30rpx;
+	margin-bottom: -2rpx;
+	padding: 4rpx 10rpx 4rpx 16rpx;
+	border-top-left-radius: 24rpx;
+	border-top-right-radius: 24rpx;
+	background-color: #4a90e2;
+}
+.coach-header.vera {
+	background-color: #f5576c;
+}
+.coach-name {
+	margin-right: 12rpx;
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #ffffff;
+}
+.coach-avatar {
+	width: 66rpx;
+	height: 66rpx;
+}
+.coach-content {
+	width: 100%;
+	padding: 16rpx 20rpx;
+	border-radius: 24rpx;
+	box-shadow: 0 8rpx 22rpx rgba(0, 0, 0, 0.12);
+}
+.coach-text {
+	width: 100%;
+	font-size: 26rpx;
+	color: #333333;
+	line-height: 40rpx;
+}
+</style>

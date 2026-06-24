@@ -1,0 +1,65 @@
+<template>
+	<view class="page">
+		<view class="nav-bar">
+			<image class="back-btn" src="/static/icons/general/btn_general_back.svg" mode="aspectFit" @click="goBack" />
+			<text class="nav-title">自由训练</text>
+			<view class="nav-placeholder"></view>
+		</view>
+
+		<view class="action-library-card" @click="goToActionLibrary">
+			<view class="card-tag"><text class="tag-text">动作库</text></view>
+			<text class="card-desc">现有力量训练动作库，快速选择动作开始力量训练</text>
+		</view>
+
+		<view class="mode-list">
+			<view class="mode-item" v-for="(mode, index) in modes" :key="mode.key" :class="{ selected: selectedModeIndex == index }" @click="selectMode(index)">
+				<image class="mode-icon" :src="mode.icon" mode="aspectFit" />
+				<view class="mode-info">
+					<text class="mode-title">{{ mode.title }}</text>
+					<text class="mode-desc">{{ mode.description }}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="bottom-btn-area">
+			<view class="start-btn" @click="startTraining"><text class="start-btn-text">直接开始</text></view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { FreeTrainingMode, freeTrainingModes } from './action-data.uts'
+
+const modes = ref<FreeTrainingMode[]>(freeTrainingModes)
+const selectedModeIndex = ref(0)
+
+function goBack() { uni.navigateBack() }
+function goToActionLibrary() { uni.navigateTo({ url: '/pages/freeTraining/action-library' }) }
+function selectMode(index: number) { selectedModeIndex.value = index }
+function startTraining() {
+	const mode = modes.value[selectedModeIndex.value]
+	uni.navigateTo({ url: '/pages/freeTraining/free-training?modeKey=' + mode.key })
+}
+</script>
+
+<style>
+.page { height: 100%; padding: 0 24rpx; background-color: #F5F5F5; overflow: hidden; }
+.nav-bar { height: 96rpx; padding-top: 16rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 56rpx; height: 56rpx; }
+.nav-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.nav-placeholder { width: 56rpx; }
+.action-library-card { margin-top: 16rpx; margin-bottom: 16rpx; padding: 20rpx 24rpx; border-radius: 20rpx; background-color: #E8F5E9; }
+.card-tag { width: 132rpx; height: 50rpx; border-radius: 25rpx; background-color: #4CAF50; align-items: center; justify-content: center; }
+.tag-text { font-size: 26rpx; font-weight: 700; color: #FFFFFF; }
+.card-desc { margin-top: 10rpx; font-size: 22rpx; line-height: 32rpx; color: #4CAF50; }
+.mode-list { flex: 1; justify-content: space-between; overflow: hidden; }
+.mode-item { min-height: 108rpx; padding: 16rpx 20rpx; border-radius: 20rpx; background-color: #FFFFFF; border-width: 3rpx; border-style: solid; border-color: rgba(0,0,0,0); flex-direction: row; align-items: center; }
+.mode-item.selected { border-color: #4CAF50; background-color: #F1F8E9; }
+.mode-icon { width: 80rpx; height: 80rpx; margin-right: 20rpx; }
+.mode-info { flex: 1; min-width: 0; justify-content: center; }
+.mode-title { font-size: 28rpx; font-weight: 700; color: #333333; }
+.mode-desc { margin-top: 4rpx; height: 28rpx; font-size: 20rpx; color: #999999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bottom-btn-area { padding: 16rpx 0 30rpx; align-items: center; }
+.start-btn { padding: 0 70rpx; height: 88rpx; border-radius: 44rpx; background-color: #4CAF50; align-items: center; justify-content: center; box-shadow: 0 6rpx 16rpx rgba(76,175,80,0.3); }
+.start-btn-text { font-size: 30rpx; font-weight: 700; color: #FFFFFF; }
+</style>

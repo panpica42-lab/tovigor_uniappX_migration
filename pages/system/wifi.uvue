@@ -1,0 +1,547 @@
+<template>
+	<view class="page">
+		<view class="header">
+			<view class="back-btn" @click="goBack">
+				<text class="back-icon">‹</text>
+			</view>
+			<text class="title">WIFI</text>
+			<view class="header-placeholder"></view>
+		</view>
+
+		<view class="panel">
+			<view class="section">
+				<view class="row row-switch">
+					<text class="row-title">无线局域网</text>
+					<switch :checked="wifiEnabled" color="#9dd532" @change="handleWifiSwitch" />
+				</view>
+				<view v-if="wifiEnabled" class="current-network">
+					<view class="current-left current-left-full">
+						<text class="check-mark">✓</text>
+						<text class="network-name">{{ currentWifiName }}</text>
+					</view>
+				</view>
+			</view>
+
+			<view v-if="wifiEnabled" class="section section-list">
+				<view class="section-head">
+					<text class="section-label">更多网络</text>
+					<text class="refresh-text" @click="refreshWifiList">重新扫描</text>
+				</view>
+
+				<view v-if="scanMessage.length > 0" class="scan-tip">
+					<text class="scan-tip-text">{{ scanMessage }}</text>
+				</view>
+
+				<scroll-view class="network-scroll" scroll-y="true" :show-scrollbar="false">
+					<view
+						v-for="item in wifiList"
+						:key="item.bssid.length > 0 ? item.bssid : item.ssid"
+						class="network-card"
+						:class="{ selected: isSelectedWifi(item) }"
+					>
+						<view class="network-row" @click="selectWifi(item)">
+							<view class="network-left">
+								<text class="network-name">{{ item.ssid }}</text>
+								<text v-if="isSelectedWifi(item)" class="network-status">{{ item.secure ? '安全' : '开放网络' }}</text>
+							</view>
+						</view>
+
+						<view v-if="isSelectedWifi(item)" class="password-panel">
+							<text class="password-label">输入网络安全密钥</text>
+							<view class="password-box">
+								<input
+									v-model="wifiPassword"
+									class="password-input"
+									:type="passwordInputType"
+									:password="!passwordVisible"
+									placeholder="请输入密码"
+									placeholder-class="password-placeholder"
+								/>
+								<view class="password-eye" @click="togglePasswordVisible">
+									<view v-if="passwordVisible" class="password-eye-dot"></view>
+								</view>
+							</view>
+							<view class="action-row">
+								<view class="action-btn action-btn-primary" @click="connectWifi">
+									<text class="action-btn-text primary-text">连接</text>
+								</view>
+								<view class="action-btn action-btn-disabled" @click="cancelSelection">
+									<text class="action-btn-text disabled-text">取消</text>
+								</view>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	connectWifiNetwork,
+	ensureWifiSupport,
+	getConnectedWifi,
+	getSystemWifiEnabled,
+	getWifiErrorMessage,
+	initWifiService,
+	scanWifiList,
+	stopWifiService,
+	WifiItem,
+	WifiServiceCallbacks,
+	WifiSupportState
+} from '@/utils/system/wifi/wifi-service.uts'
+
+function createEmptyWifi(): WifiItem {
+	return { ssid: '', bssid: '', secure: false, signalStrength: 0 }
+}
+
+const wifiEnabled = ref(true)
+const currentWifi = ref<WifiItem>(createEmptyWifi())
+const wifiList = ref<WifiItem[]>([])
+const selectedWifi = ref<WifiItem | null>(null)
+const wifiPassword = ref('')
+const passwordVisible = ref(false)
+const scanMessage = ref('正在扫描附近 WiFi...')
+const currentWifiName = computed<string>(() => {
+	return currentWifi.value.ssid.length > 0 ? currentWifi.value.ssid : '未连接网络'
+})
+const passwordInputType = computed<string>(() => {
+	return passwordVisible.value ? 'text' : 'password'
+})
+
+function showToast(message: string) {
+	uni.showToast({ title: message, icon: 'none' })
+}
+
+function handleWifiError(error: any | null, fallbackMessage: string) {
+	const message = getWifiErrorMessage(error, fallbackMessage)
+	scanMessage.value = message
+	showToast(message)
+}
+
+async function refreshWifiList() {
+	const supportState: WifiSupportState = ensureWifiSupport()
+	if (!wifiEnabled.value || !supportState.supported) {
+		if (!supportState.supported) scanMessage.value = supportState.message
+		return
+	}
+
+	try {
+		scanMessage.value = '正在扫描附近 WiFi...'
+		await scanWifiList()
+	} catch (error) {
+		handleWifiError(error, '扫描 WiFi 失败')
+	}
+}
+
+function setWifiList(list: WifiItem[]) {
+	wifiList.value = list
+	scanMessage.value = wifiList.value.length > 0 ? '' : '未发现可用网络'
+
+	const selected = selectedWifi.value
+	if (selected != null && !wifiList.value.some((item: WifiItem): boolean => item.ssid == selected.ssid)) {
+		selectedWifi.value = null
+		wifiPassword.value = ''
+	}
+}
+
+function handleWifiListChange(list: WifiItem[]) {
+	setWifiList(list)
+}
+
+function handleWifiConnected(wifi: WifiItem) {
+	currentWifi.value = wifi
+	selectedWifi.value = null
+	wifiPassword.value = ''
+	showToast('WiFi 已连接')
+	refreshWifiList()
+}
+
+function goBack() {
+	uni.navigateBack()
+}
+
+async function refreshConnectedWifi() {
+	const supportState = ensureWifiSupport()
+	if (!supportState.supported) {
+		scanMessage.value = supportState.message
+		return
+	}
+
+	try {
+		currentWifi.value = await getConnectedWifi()
+	} catch (_error) {
+		currentWifi.value = createEmptyWifi()
+	}
+}
+
+async function initWifiModule() {
+	const supportState = ensureWifiSupport()
+	if (!supportState.supported) {
+		scanMessage.value = supportState.message
+		return
+	}
+
+	try {
+		scanMessage.value = '正在扫描附近 WiFi...'
+		const callbacks: WifiServiceCallbacks = {
+			onWifiListChange: handleWifiListChange,
+			onWifiConnected: handleWifiConnected
+		}
+		await initWifiService(callbacks)
+
+		await refreshConnectedWifi()
+		await refreshWifiList()
+	} catch (error) {
+		handleWifiError(error, 'WiFi 初始化失败')
+	}
+}
+
+async function handleWifiSwitch(event: UniSwitchChangeEvent) {
+	wifiEnabled.value = event.detail.value
+	if (!wifiEnabled.value) {
+		selectedWifi.value = null
+		wifiPassword.value = ''
+		wifiList.value = []
+		scanMessage.value = 'WiFi 已关闭'
+		return
+	}
+
+	await initWifiModule()
+}
+
+function isSelectedWifi(item: WifiItem): boolean {
+	const selected = selectedWifi.value
+	if (selected == null) return false
+	return selected.ssid == item.ssid
+}
+
+function selectWifi(item: WifiItem) {
+	selectedWifi.value = item
+	wifiPassword.value = ''
+	passwordVisible.value = false
+}
+
+function cancelSelection() {
+	selectedWifi.value = null
+	wifiPassword.value = ''
+	passwordVisible.value = false
+}
+
+function togglePasswordVisible() {
+	passwordVisible.value = !passwordVisible.value
+}
+
+function connectWifi() {
+	const selected = selectedWifi.value
+	if (selected == null) return
+
+	if (selected.secure && wifiPassword.value.trim().length == 0) {
+		showToast('请输入 WiFi 密码')
+		return
+	}
+
+	connectWifiNetwork({
+		ssid: selected.ssid,
+		bssid: selected.bssid,
+		password: wifiPassword.value,
+		secure: selected.secure
+	})
+		.then((result) => {
+			if (result.manualConnect) {
+				showToast('已打开系统连接流程，请按系统提示完成连接')
+				return
+			}
+
+			showToast('正在 App 内连接 WiFi...')
+		})
+		.catch((error) => {
+			handleWifiError(error, '连接 WiFi 失败')
+		})
+}
+
+onMounted(() => {
+	wifiEnabled.value = getSystemWifiEnabled()
+	if (wifiEnabled.value) {
+		initWifiModule()
+	} else {
+		scanMessage.value = '系统 WiFi 未开启，请先在设备设置中打开'
+	}
+})
+
+onBeforeUnmount(() => {
+	stopWifiService()
+})
+</script>
+
+<style scoped>
+.page {
+	width: 750rpx;
+	height: 100%;
+	padding: 72rpx 18rpx 32rpx;
+	box-sizing: border-box;
+	background: #efefef;
+}
+
+.header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 20rpx;
+}
+
+.back-btn {
+	width: 56rpx;
+	height: 56rpx;
+	border-radius: 28rpx;
+	background: #6c6c6c;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.back-icon {
+	font-size: 42rpx;
+	line-height: 42rpx;
+	color: #ffffff;
+	transform: translateY(-2rpx);
+}
+
+.title {
+	font-size: 40rpx;
+	font-weight: 700;
+	color: #111111;
+}
+
+.header-placeholder {
+	width: 56rpx;
+	height: 56rpx;
+}
+
+.panel {
+	background: #ffffff;
+	border-radius: 34rpx;
+	padding: 28rpx 20rpx;
+	box-sizing: border-box;
+}
+
+.section {
+	border: 1rpx solid #e7e7e7;
+	border-radius: 24rpx;
+	padding: 0 18rpx;
+	background: #ffffff;
+}
+
+.section + .section {
+	margin-top: 20rpx;
+}
+
+.row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 86rpx;
+}
+
+.row-switch {
+	border-bottom: 1rpx solid #ececec;
+}
+
+.row-title {
+	font-size: 28rpx;
+	color: #212121;
+}
+
+.current-network {
+	min-height: 82rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.current-left,
+.network-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.current-left-full {
+	width: 100%;
+}
+
+.check-mark {
+	margin-right: 16rpx;
+	font-size: 36rpx;
+	color: #9dd532;
+	font-weight: 700;
+}
+
+.network-name {
+	font-size: 30rpx;
+	color: #222222;
+}
+
+.section-list {
+	padding-top: 18rpx;
+	padding-bottom: 18rpx;
+}
+
+.section-head {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 14rpx;
+}
+
+.section-label {
+	font-size: 26rpx;
+	color: #444444;
+}
+
+.refresh-text {
+	font-size: 24rpx;
+	color: #9dd532;
+}
+
+.scan-tip {
+	padding: 8rpx 0 12rpx;
+}
+
+.scan-tip-text {
+	font-size: 22rpx;
+	color: #8b8b8b;
+}
+
+.network-scroll {
+	max-height: 520rpx;
+}
+
+.network-card {
+	border-radius: 20rpx;
+}
+
+.network-card.selected {
+	background: #f3f3f3;
+	padding: 10rpx 14rpx 16rpx;
+}
+
+.network-card + .network-card {
+	border-top: 1rpx solid #ececec;
+}
+
+.network-card.selected + .network-card {
+	border-top: none;
+}
+
+.network-row {
+	justify-content: space-between;
+	min-height: 76rpx;
+}
+
+.network-left {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+}
+
+.network-status {
+	margin-top: 6rpx;
+	font-size: 22rpx;
+	color: #666666;
+}
+
+.password-panel {
+	padding-top: 6rpx;
+}
+
+.password-label {
+	margin-bottom: 10rpx;
+	font-size: 24rpx;
+	color: #444444;
+}
+
+.password-box {
+	height: 68rpx;
+	padding: 0 16rpx;
+	background: #ffffff;
+	border-radius: 12rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.password-input {
+	flex: 1;
+	font-size: 28rpx;
+	color: #222222;
+}
+
+.password-placeholder {
+	color: #a5a5a5;
+}
+
+.password-eye {
+	width: 34rpx;
+	height: 34rpx;
+	margin-left: 12rpx;
+	border-width: 3rpx;
+	border-style: solid;
+	border-color: #444444;
+	border-radius: 17rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.password-eye-dot {
+	width: 14rpx;
+	height: 14rpx;
+	border-radius: 7rpx;
+	background-color: #444444;
+}
+
+.action-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 16rpx;
+}
+
+.action-btn {
+	width: 180rpx;
+	height: 52rpx;
+	border-radius: 26rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.action-btn-primary {
+	background: #9dd532;
+}
+
+.action-btn-disabled {
+	background: #e3e3e3;
+}
+
+.action-btn-text {
+	font-size: 24rpx;
+}
+
+.primary-text {
+	color: #111111;
+}
+
+.disabled-text {
+	color: #9f9f9f;
+}
+</style>

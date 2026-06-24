@@ -1,0 +1,39 @@
+<template>
+	<view class="step-bar">
+		<view v-for="item in steps" :key="item" class="step-item" :class="{ active: item <= currentStep }"></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const props = defineProps<{
+	totalSteps: number
+	currentStep: number
+}>()
+
+const steps = computed<number[]>(() => {
+	const result: number[] = []
+	for (let i = 1; i <= props.totalSteps; i += 1) result.push(i)
+	return result
+})
+</script>
+
+<style>
+.step-bar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 0 24rpx;
+}
+
+.step-item {
+	flex: 1;
+	height: 8rpx;
+	margin-right: 8rpx;
+	border-radius: 999rpx;
+	background-color: #e0e0e0;
+}
+
+.step-item.active {
+	background-color: #9dd532;
+}
+</style>

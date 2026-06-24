@@ -1,0 +1,120 @@
+<template>
+	<view class="chart">
+		<view class="grid">
+			<view class="grid-line"></view>
+			<view class="grid-line"></view>
+			<view class="grid-line"></view>
+			<view class="grid-line"></view>
+		</view>
+		<view class="bars">
+			<view class="slot" v-for="(bar, index) in displayBars" :key="index">
+				<view
+					v-if="bar.height > 0"
+					class="bar"
+					:class="{ 'bar-live': bar.live }"
+					:style="{ height: bar.height + '%' }"
+				></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+type DisplayBar = {
+	height: number
+	live: boolean
+}
+
+const props = defineProps<{
+	values: number[]
+	liveValue: number
+	maxValue: number
+	slotCount: number
+}>()
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.max(min, Math.min(max, value))
+}
+
+const displayBars = computed((): DisplayBar[] => {
+	const slots = Math.max(1, props.slotCount)
+	const maxValue = Math.max(1, props.maxValue)
+	const hasLive = props.liveValue > 0
+	const historyLimit = hasLive ? slots - 1 : slots
+	const source = props.values.slice(Math.max(0, props.values.length - historyLimit))
+	const result: DisplayBar[] = []
+	source.forEach((value) => {
+		result.push({
+			height: clamp((value / maxValue) * 100, 0, 100),
+			live: false
+		})
+	})
+	if (hasLive) {
+		result.push({
+			height: clamp((props.liveValue / maxValue) * 100, 0, 100),
+			live: true
+		})
+	}
+	while (result.length < slots) {
+		result.push({
+			height: 0,
+			live: false
+		})
+	}
+	return result
+})
+</script>
+
+<style>
+.chart {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-height: 72rpx;
+	background-color: #f7fafc;
+	border-radius: 16rpx;
+	overflow: hidden;
+}
+
+.grid {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	justify-content: space-around;
+}
+
+.grid-line {
+	height: 1px;
+	background-color: #d9e2ec;
+}
+
+.bars {
+	position: absolute;
+	left: 24rpx;
+	right: 24rpx;
+	top: 10rpx;
+	bottom: 10rpx;
+	flex-direction: row;
+	align-items: flex-end;
+}
+
+.slot {
+	flex: 1;
+	height: 100%;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.bar {
+	width: 14rpx;
+	min-height: 2rpx;
+	border-radius: 9rpx 9rpx 0 0;
+	background-color: #4f7cff;
+}
+
+.bar-live {
+	background-color: #24c6a8;
+}
+</style>

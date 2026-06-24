@@ -1,0 +1,25 @@
+export function navigateBackToRoute(targetRoute: string, fallbackUrl: string = '') {
+	const pages = getCurrentPages()
+	let delta = -1
+	for (let i = pages.length - 1; i >= 0; i -= 1) {
+		const page = pages[i]
+		if (page.route == targetRoute || '/' + page.route == targetRoute) {
+			delta = pages.length - 1 - i
+			break
+		}
+	}
+	if (delta > 0) {
+		uni.navigateBack({ delta })
+		return
+	}
+	uni.reLaunch({ url: fallbackUrl.length > 0 ? fallbackUrl : targetRoute })
+}
+
+export function navigateBackOrReLaunch(fallbackUrl: string) {
+	const pages = getCurrentPages()
+	if (pages.length > 1) {
+		uni.navigateBack()
+		return
+	}
+	uni.reLaunch({ url: fallbackUrl })
+}

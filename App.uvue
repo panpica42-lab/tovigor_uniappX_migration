@@ -1,0 +1,77 @@
+<script setup lang="uts">
+	import { connectSerial, setSerialDebugMode } from '@/utils/serialRuntime.uts'
+	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_PORTS } from '@/utils/serialConfig.uts'
+
+	const DEBUG_MODE = true // true: 跳过串口连接，false: 启用串口连接
+
+	// #ifdef APP-ANDROID || APP-HARMONY
+	let firstBackTime = 0
+	// #endif
+
+	function initSerialConnection() {
+		console.log('[App] init serial connection leftPath=' + MOTOR_SERIAL_PORTS.left.path + ' rightPath=' + MOTOR_SERIAL_PORTS.right.path + ' legacyPath=' + MOTOR_SERIAL_PATH + ' baudRate=' + MOTOR_BAUD_RATE.toString())
+		connectSerial(MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, () => {
+			console.log('[App] serial connected, dual motor runtime ready')
+		}, (message: string) => {
+			console.log('[App] serial connect failed: ' + message)
+			uni.showToast({
+				title: '设备连接失败',
+				icon: 'none',
+				duration: 3000
+			})
+		})
+	}
+
+	onLaunch(() => {
+		console.log('App Launch')
+		console.log('[App] DEBUG_MODE=' + DEBUG_MODE.toString())
+		setSerialDebugMode(DEBUG_MODE)
+		if (DEBUG_MODE) {
+			console.log('[App] DEBUG_MODE=true, UI debug mode enabled, skip serial connection and report runtime connected=true')
+			return
+		}
+		console.log('[App] DEBUG_MODE=false, serial connection enabled')
+		initSerialConnection()
+	})
+
+	onAppShow(() => {
+		console.log('App Show')
+	})
+
+	onAppHide(() => {
+		console.log('App Hide')
+	})
+
+	// #ifdef APP-ANDROID || APP-HARMONY
+	onLastPageBackPress(() => {
+		console.log('App LastPageBackPress')
+		if (firstBackTime == 0) {
+			uni.showToast({
+				title: '再按一次退出应用',
+				position: 'bottom'
+			})
+			firstBackTime = Date.now()
+			setTimeout(() => {
+				firstBackTime = 0
+			}, 2000)
+		} else if (Date.now() - firstBackTime < 2000) {
+			firstBackTime = Date.now()
+			uni.exit()
+		}
+	})
+
+	onExit(() => {
+		console.log('App Exit')
+	})
+	// #endif
+</script>
+
+<style>
+	.uni-row {
+		flex-direction: row;
+	}
+
+	.uni-column {
+		flex-direction: column;
+	}
+</style>

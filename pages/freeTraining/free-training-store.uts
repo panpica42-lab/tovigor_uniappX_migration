@@ -1,0 +1,25 @@
+import { FreeTrainingAction, cloneActions } from './action-data.uts'
+
+let selectedActions: FreeTrainingAction[] = []
+let trainingActions: FreeTrainingAction[] = []
+
+export function setSelectedActions(actions: FreeTrainingAction[]) {
+	selectedActions = cloneActions(actions)
+}
+
+export function getSelectedActions(): FreeTrainingAction[] {
+	return cloneActions(selectedActions)
+}
+
+export function setTrainingActions(actions: FreeTrainingAction[]) {
+	trainingActions = cloneActions(actions)
+}
+
+export function getTrainingActions(): FreeTrainingAction[] {
+	return cloneActions(trainingActions)
+}
+
+export function clearFreeTrainingStore() {
+	selectedActions = []
+	trainingActions = []
+}

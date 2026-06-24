@@ -1,0 +1,318 @@
+import { requestWifiPermissions } from '../permission-service.uts'
+import {
+	AndroidUniWifiInfo,
+	connectWifi as wifiConnectWifi,
+	getConnectedWifi as wifiGetConnectedWifi,
+	getWifiList as wifiGetWifiList,
+	offGetWifiList,
+	offWifiConnected,
+	onGetWifiList,
+	onWifiConnected,
+	startWifi,
+	stopWifi
+} from '@/uni_modules/uni-wifi/utssdk/app-android/index.uts'
+import {
+	UniGetWifiListCallback,
+	UniWifiInfo,
+	UniWifiResult,
+	UniWifiResultCallback
+} from '@/uni_modules/uni-wifi/utssdk/interface.uts'
+
+export type WifiItem = {
+	ssid: string
+	bssid: string
+	secure: boolean
+	signalStrength: number
+}
+
+export type WifiSupportState = {
+	supported: boolean
+	message: string
+}
+
+export type WifiConnectOptions = {
+	ssid: string
+	bssid: string
+	password: string
+	secure: boolean
+}
+
+export type WifiConnectResult = {
+	manualConnect: boolean
+}
+
+export type WifiServiceCallbacks = {
+	onWifiListChange: (list: WifiItem[]) => void
+	onWifiConnected: (wifi: WifiItem) => void
+}
+
+let isWifiReady = false
+let wifiListListener: UniGetWifiListCallback | null = null
+let wifiConnectedListener: UniWifiResultCallback | null = null
+let wifiScanTimer = 0
+
+function emptyWifiListListener(_res: UTSJSONObject) {}
+
+function emptyWifiConnectedListener(_res: UniWifiResult) {}
+
+function isSecureWifi(capabilities: string): boolean {
+	if (capabilities.length == 0) return false
+	return capabilities.includes('WEP') ||
+		capabilities.includes('WPA') ||
+		capabilities.includes('PSK') ||
+		capabilities.includes('EAP') ||
+		capabilities.includes('SAE')
+}
+
+function normalizeWifiItem(item: UniWifiInfo): WifiItem {
+	return {
+		ssid: item.SSID,
+		bssid: item.BSSID == null ? '' : item.BSSID,
+		secure: item.secure == null ? false : item.secure,
+		signalStrength: item.signalStrength == null ? 0 : item.signalStrength
+	}
+}
+
+function normalizeAndroidWifiItem(item: AndroidUniWifiInfo): WifiItem {
+	return {
+		ssid: item.SSID,
+		bssid: item.BSSID == null ? '' : item.BSSID,
+		secure: item.secure,
+		signalStrength: item.signalStrength
+	}
+}
+
+function normalizeWifiList(list: AndroidUniWifiInfo[]): WifiItem[] {
+	const ssidMap = new Map<string, WifiItem>()
+
+	for (let i = 0; i < list.length; i += 1) {
+		const normalizedItem = normalizeAndroidWifiItem(list[i])
+		if (normalizedItem.ssid.length == 0) continue
+
+		const existingItem = ssidMap.get(normalizedItem.ssid)
+		if (existingItem == null || normalizedItem.signalStrength > existingItem.signalStrength) {
+			ssidMap.set(normalizedItem.ssid, normalizedItem)
+		}
+	}
+
+	const values: WifiItem[] = []
+	ssidMap.forEach((item: WifiItem, _ssid: string) => {
+		values.push(item)
+	})
+	values.sort((a: WifiItem, b: WifiItem): number => b.signalStrength - a.signalStrength)
+	return values
+}
+
+function getWifiListFromResult(result: UTSJSONObject): AndroidUniWifiInfo[] {
+	const rawList = result['wifiList']
+	if (rawList == null) return []
+	return rawList as AndroidUniWifiInfo[]
+}
+
+function getAndroidVersion(): number {
+	const systemInfo = uni.getSystemInfoSync()
+	const systemText = systemInfo.system == null ? '' : systemInfo.system
+	const versionMatch = `${systemText}`.match(/(\d+)/)
+	if (versionMatch == null || versionMatch.length == 0) return 0
+	return parseInt(`${versionMatch[0]}`, 10)
+}
+
+function getWifiErrorText(error: any | null): string {
+	if (error == null) return ''
+	const text = `${error}`
+	if (text.includes('errCode=12000') || text.includes('not init')) return 'WiFi 模块未初始化，请重新扫描后再连接'
+	if (text.includes('errCode=12001') || text.includes('system not support')) return '当前系统不支持 App 内直连 WiFi'
+	if (text.includes('errCode=12002') || text.includes('password error')) return 'WiFi 密码错误或连接失败'
+	if (text.includes('errCode=12005') || text.includes('wifi not turned on')) return '系统 WiFi 未开启，请先在设备设置中打开'
+	if (text.includes('errCode=12007') || text.includes('user denied')) return 'WiFi 连接被系统拒绝'
+	if (text.includes('errCode=12013') || text.includes('wifi config may be expired')) return '系统保存的 WiFi 配置已过期，请忘记该网络后重试'
+	if (text == 'Error') return ''
+	if (text == '[object Object]') return ''
+	return text
+}
+
+function bindWifiListeners(callbacks: WifiServiceCallbacks) {
+	if (wifiListListener != null) {
+		offGetWifiList(() => {})
+	}
+
+	if (wifiConnectedListener != null) {
+		offWifiConnected(wifiConnectedListener)
+	}
+
+	wifiListListener = (res: UTSJSONObject) => {
+		callbacks.onWifiListChange(normalizeWifiList(getWifiListFromResult(res)))
+	}
+
+	wifiConnectedListener = (res: UniWifiResult) => {
+		const wifi = res.wifi
+		if (wifi == null) return
+		callbacks.onWifiConnected(normalizeWifiItem(wifi))
+	}
+
+	onGetWifiList(wifiListListener as UniGetWifiListCallback)
+	onWifiConnected(wifiConnectedListener as UniWifiResultCallback)
+}
+
+function startWifiApi(): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		startWifi({
+			success: (_res: UniWifiResult) => { resolve() },
+			fail: (err: UniError) => { reject(err) },
+			complete: (_res: any) => {}
+		})
+	})
+}
+
+function stopWifiApi() {
+	stopWifi({
+		success: (_res: UniWifiResult) => {},
+		fail: (_err: UniError) => {},
+		complete: (_res: any) => {}
+	})
+}
+
+export function getWifiErrorMessage(error: any | null, fallbackMessage: string): string {
+	const errorText = getWifiErrorText(error)
+	if (errorText.length > 0) return errorText
+
+	return fallbackMessage
+}
+
+export function ensureWifiSupport(): WifiSupportState {
+	// #ifndef APP-ANDROID
+	return {
+		supported: false,
+		message: '当前环境不支持真实 WiFi 扫描，请在 Android App 中调试'
+	}
+	// #endif
+
+	return {
+		supported: true,
+		message: ''
+	}
+}
+
+export function getSystemWifiEnabled(): boolean {
+	try {
+		const settings = uni.getSystemSetting()
+		return settings.wifiEnabled == true
+	} catch (_error) {
+	}
+
+	return true
+}
+
+export async function initWifiService(callbacks: WifiServiceCallbacks): Promise<void> {
+	const supportState = ensureWifiSupport()
+	if (!supportState.supported) throw new Error(supportState.message)
+
+	await requestWifiPermissions()
+
+	if (!isWifiReady) {
+		await startWifiApi()
+		isWifiReady = true
+	}
+
+	bindWifiListeners(callbacks)
+}
+
+export function getConnectedWifi(): Promise<WifiItem> {
+	return new Promise<WifiItem>((resolve, reject) => {
+		wifiGetConnectedWifi({
+			partialInfo: false,
+			success: (res: UniWifiResult) => {
+				const wifi = res.wifi
+				if (wifi == null) {
+					resolve({ ssid: '', bssid: '', secure: false, signalStrength: 0 })
+					return
+				}
+				resolve(normalizeWifiItem(wifi))
+			},
+			fail: (err: UniError) => { reject(err) },
+			complete: (_res: any) => {}
+		})
+	})
+}
+
+export function scanWifiList(): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		if (wifiScanTimer > 0) {
+			clearTimeout(wifiScanTimer)
+			wifiScanTimer = 0
+		}
+
+		if (wifiListListener != null) {
+			onGetWifiList(wifiListListener as UniGetWifiListCallback)
+		}
+
+		wifiScanTimer = setTimeout(() => {
+			wifiScanTimer = 0
+			reject(new Error('扫描 WiFi 超时，请确认系统 WiFi、定位服务和定位权限已开启'))
+		}, 8000)
+
+		wifiGetWifiList({
+			success: (_res: UniWifiResult) => {
+				if (wifiScanTimer > 0) {
+					clearTimeout(wifiScanTimer)
+					wifiScanTimer = 0
+				}
+				resolve()
+			},
+			fail: (err: UniError) => {
+				if (wifiScanTimer > 0) {
+					clearTimeout(wifiScanTimer)
+					wifiScanTimer = 0
+				}
+				reject(err)
+			},
+			complete: (_res: any) => {}
+		})
+	})
+}
+
+export async function connectWifiNetwork(options: WifiConnectOptions): Promise<WifiConnectResult> {
+	const trimmedPassword = options.password.trim()
+	if (options.secure && trimmedPassword.length == 0) {
+		throw new Error('请输入 WiFi 密码')
+	}
+
+	if (!isWifiReady) {
+		await requestWifiPermissions()
+		await startWifiApi()
+		isWifiReady = true
+	}
+
+	return new Promise<WifiConnectResult>((resolve, reject) => {
+		const manualConnect = false
+		wifiConnectWifi({
+			SSID: options.ssid,
+			BSSID: options.bssid,
+			password: trimmedPassword,
+			maunal: manualConnect,
+			partialInfo: false,
+			success: (_res: UniWifiResult) => {
+				resolve({ manualConnect })
+			},
+			fail: (err: UniError) => { reject(err) },
+			complete: (_res: any) => {}
+		})
+	})
+}
+
+export function stopWifiService() {
+	if (!isWifiReady) return
+
+	if (wifiScanTimer > 0) {
+		clearTimeout(wifiScanTimer)
+		wifiScanTimer = 0
+	}
+
+	offGetWifiList(() => {})
+	if (wifiConnectedListener != null) offWifiConnected(wifiConnectedListener)
+	stopWifiApi()
+
+	wifiListListener = null
+	wifiConnectedListener = null
+	isWifiReady = false
+}

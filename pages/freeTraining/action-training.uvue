@@ -1,0 +1,431 @@
+<template>
+	<view class="page" :style="{ width: screenWidthText, height: screenHeightText }">
+		<video
+			id="freeActionVideo"
+			class="action-video"
+			:class="{ fullscreen: videoFullscreen }"
+			:src="videoSrc"
+			loop
+			muted
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@loadedmetadata="onVideoLoaded"
+			@ended="onVideoEnded"
+			@error="handleVideoError"
+		></video>
+		<view class="video-hit-layer" :class="{ fullscreen: videoFullscreen }" @click="handleVideoTap"></view>
+
+		<view class="nav-bar">
+			<view class="back-round" @click="goBack"><text class="back-arrow">‹</text></view>
+			<text class="nav-title">{{ currentActionName }}</text>
+			<view class="nav-placeholder"></view>
+		</view>
+
+		<view class="content-layer" :class="{ fullscreen: videoFullscreen }">
+			<view class="stat-board">
+				<view class="stat-item"><text class="stat-label">组数/次数</text><text class="stat-value">{{ setsText }}</text></view>
+				<view class="divider"></view>
+				<view class="stat-item"><text class="stat-label">时间</text><text class="stat-value">{{ durationText }}</text></view>
+				<view class="divider"></view>
+				<view class="stat-item"><text class="stat-label">千卡</text><text class="stat-value">{{ caloriesText }}</text></view>
+			</view>
+			<view class="spacer" @click="handleVideoTap"><text v-if="videoFullscreen" class="fs-hint">双击退出全屏</text></view>
+			<view class="force-panel">
+				<view class="force-head"><text class="mode-text">{{ currentActionModeLabel }}</text><text class="force-text">{{ forceValue }} kg</text></view>
+				<view class="slider-row">
+					<view class="step-btn" :class="{ disabled: !powerOn || pendingAction.length > 0 }" @click="decreaseForce"><text class="step-text">-</text></view>
+					<slider class="force-slider" :min="5" :max="55" :value="forceValue" :disabled="!powerOn || pendingAction.length > 0" activeColor="#4CAF50" backgroundColor="#CCCCCC" block-color="#FFFFFF" :block-size="22" @changing="onSliderChanging" @change="onSliderChange" />
+					<view class="step-btn" :class="{ disabled: !powerOn || pendingAction.length > 0 }" @click="increaseForce"><text class="step-text">+</text></view>
+				</view>
+			</view>
+			<view class="power-btn" :class="{ running: powerOn, pending: pendingAction.length > 0 }" @click="togglePower">
+				<text class="power-text">{{ powerButtonText }}</text>
+			</view>
+		</view>
+
+		<view v-if="showSafetyModal" class="modal-mask">
+			<view class="modal-card">
+				<text class="modal-title">训练安全须知</text>
+				<text class="modal-item">1. 进行力量训练前，请先完成基础热身</text>
+				<text class="modal-item">2. 使用力量臂前，请确认力臂挡位已经锁好</text>
+				<text class="modal-item">3. 请勿将整个人或其他重物悬挂在力臂上</text>
+				<text class="modal-item">4. 请勿用硬物敲击设备屏幕</text>
+				<text class="modal-item">5. 训练结束后，请及时将力量臂复位并锁好</text>
+				<view class="modal-confirm" @click="confirmSafety"><text class="modal-confirm-text">我知道了</text></view>
+			</view>
+		</view>
+
+		<view v-if="showTransitionModal" class="modal-mask">
+			<view class="modal-card center-card">
+				<text class="modal-title">当前动作已完成</text>
+				<text class="modal-copy">已完成《{{ completedActionName }}》</text>
+				<text class="modal-copy sub-copy">{{ nextCountdown }}s 后开始下一个动作：《{{ nextActionName }}》</text>
+				<view class="modal-confirm" @click="beginNextAction"><text class="modal-confirm-text">直接开始</text></view>
+			</view>
+		</view>
+
+		<view v-if="showExitModal" class="modal-mask">
+			<view class="modal-card center-card">
+				<text class="modal-title">确认返回？</text>
+				<text class="modal-copy">当前训练将停止力量输出</text>
+				<view class="modal-actions">
+					<view class="modal-action cancel" @click="closeExitModal"><text class="modal-action-text">取消</text></view>
+					<view class="modal-action ok" @click="confirmExit"><text class="modal-action-text ok-text">关闭力量并返回</text></view>
+				</view>
+			</view>
+		</view>
+
+		<view v-if="showCompleteModal" class="modal-mask">
+			<view class="modal-card center-card">
+				<text class="modal-title">训练已完成</text>
+				<text class="modal-copy">你已完成全部预设训练动作。</text>
+				<view class="modal-confirm" @click="goToActionLibrary"><text class="modal-confirm-text">返回动作库</text></view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { FreeTrainingAction } from './action-data.uts'
+import { getTrainingActions } from './free-training-store.uts'
+import { RuntimeStatus, SerialFrame, getStatus, onFrame, offFrame, onStatus, offStatus, startWorking, stopForce, updateWorkingForce } from '@/utils/serialRuntime.uts'
+
+const videoSrc = '/static/icons/general/video-placeholder.mp4'
+const PENDING_LOCK_MS = 800
+const NEXT_ACTION_DELAY_SECONDS = 10
+const screenWidth = ref(750)
+const screenHeight = ref(0)
+const actions = ref<FreeTrainingAction[]>([])
+const currentActionIndex = ref(0)
+const flow = ref('idle')
+const videoFullscreen = ref(false)
+const showSafetyModal = ref(true)
+const showTransitionModal = ref(false)
+const showExitModal = ref(false)
+const showCompleteModal = ref(false)
+const powerOn = ref(false)
+const pendingAction = ref('')
+const runtimeStatus = ref<RuntimeStatus>(getStatus())
+const forceValue = ref(15)
+const setIndex = ref(1)
+const repCount = ref(0)
+const activeSeconds = ref(0)
+const calories = ref(0)
+const nextCountdown = ref(NEXT_ACTION_DELAY_SECONDS)
+const completedActionName = ref('')
+let pendingTimer = 0
+let activeTimer = 0
+let countdownTimer = 0
+let lastTapTs = 0
+let lastActiveTs = 0
+let countBaseline = 0
+let needCaptureBaseline = false
+
+function pad2(value: number): string { return value < 10 ? '0' + value.toString() : value.toString() }
+function formatTime(totalSeconds: number): string {
+	return pad2(Math.floor(totalSeconds / 3600)) + ':' + pad2(Math.floor((totalSeconds % 3600) / 60)) + ':' + pad2(totalSeconds % 60)
+}
+function readSliderValue(event: UniSliderChangeEvent): number { return parseInt(`${event.detail.value}`, 10) }
+function getCurrentAction(): FreeTrainingAction | null {
+	if (actions.value.length == 0) return null
+	return actions.value[currentActionIndex.value]
+}
+function syncActionConfig() {
+	const action = getCurrentAction()
+	if (action == null) return
+	forceValue.value = action.defaultResistance
+	setIndex.value = 1
+	repCount.value = 0
+	countBaseline = 0
+	needCaptureBaseline = true
+}
+function clearPending() {
+	if (pendingTimer != 0) clearTimeout(pendingTimer)
+	pendingTimer = 0
+	pendingAction.value = ''
+}
+function lockControls(action: string) {
+	clearPending()
+	pendingAction.value = action
+	pendingTimer = setTimeout(() => {
+		pendingTimer = 0
+		pendingAction.value = ''
+	}, PENDING_LOCK_MS)
+}
+function startTimer() {
+	if (activeTimer != 0) clearInterval(activeTimer)
+	activeTimer = setInterval(() => {
+		if (lastActiveTs > 0 && Date.now() - lastActiveTs < 2000) activeSeconds.value += 1
+	}, 1000)
+}
+function stopTimer() {
+	if (activeTimer != 0) clearInterval(activeTimer)
+	activeTimer = 0
+}
+function clearCountdown() {
+	if (countdownTimer != 0) clearInterval(countdownTimer)
+	countdownTimer = 0
+	nextCountdown.value = NEXT_ACTION_DELAY_SECONDS
+}
+function stopPowerOutput() {
+	if (powerOn.value || pendingAction.value == 'opening') stopForce(800, 200)
+	powerOn.value = false
+	stopTimer()
+	clearPending()
+}
+function startCurrentActionPower() {
+	const action = getCurrentAction()
+	if (action == null) return
+	if (!runtimeStatus.value.connected) {
+		uni.showToast({ title: '设备连接中，暂未连接', icon: 'none' })
+		return
+	}
+	powerOn.value = true
+	flow.value = 'training'
+	lockControls('opening')
+	needCaptureBaseline = true
+	lastActiveTs = 0
+	startTimer()
+	startWorking(forceValue.value, action.forceMode, 200)
+}
+function beginNextAction() {
+	if (flow.value != 'transitioning') return
+	clearCountdown()
+	showTransitionModal.value = false
+	startCurrentActionPower()
+}
+function finishCurrentAction() {
+	const finishedAction = getCurrentAction()
+	completedActionName.value = finishedAction == null ? '' : finishedAction.name
+	if (currentActionIndex.value >= actions.value.length - 1) {
+		flow.value = 'completed'
+		stopPowerOutput()
+		showCompleteModal.value = true
+		return
+	}
+	flow.value = 'transitioning'
+	showTransitionModal.value = true
+	currentActionIndex.value += 1
+	syncActionConfig()
+	clearCountdown()
+	countdownTimer = setInterval(() => {
+		nextCountdown.value -= 1
+		if (nextCountdown.value <= 0) beginNextAction()
+	}, 1000)
+}
+function handleSetCompleted(currentSportCount: number) {
+	const action = getCurrentAction()
+	if (action == null) return
+	if (setIndex.value >= action.sets) {
+		repCount.value = action.reps
+		finishCurrentAction()
+		return
+	}
+	setIndex.value += 1
+	countBaseline = currentSportCount
+	repCount.value = 0
+}
+
+const screenWidthText = computed<string>(() => screenWidth.value.toString() + 'px')
+const screenHeightText = computed<string>(() => screenHeight.value > 0 ? screenHeight.value.toString() + 'px' : '100%')
+const currentActionName = computed<string>(() => {
+	const action = getCurrentAction()
+	return action == null ? '动作训练' : action.name
+})
+const currentActionModeLabel = computed<string>(() => {
+	const action = getCurrentAction()
+	return action == null ? '恒力' : action.modeLabel
+})
+const nextActionName = computed<string>(() => {
+	const action = getCurrentAction()
+	return action == null ? '' : action.name
+})
+const setsText = computed<string>(() => pad2(setIndex.value) + '/' + pad2(repCount.value))
+const durationText = computed<string>(() => formatTime(activeSeconds.value))
+const caloriesText = computed<string>(() => (calories.value / 1000).toFixed(2))
+const powerButtonText = computed<string>(() => {
+	if (pendingAction.value == 'opening') return '启动中'
+	if (pendingAction.value == 'closing') return '关闭中'
+	return powerOn.value ? '■ 停止' : '▶ 开始训练'
+})
+
+function updateScreenSize() {
+	const info = uni.getSystemInfoSync()
+	screenWidth.value = info.windowWidth
+	screenHeight.value = info.windowHeight
+}
+function togglePower() {
+	if (pendingAction.value.length > 0 || flow.value == 'transitioning' || flow.value == 'completed') return
+	if (powerOn.value) {
+		powerOn.value = false
+		lockControls('closing')
+		stopTimer()
+		stopForce(800, 200)
+		flow.value = 'idle'
+		return
+	}
+	startCurrentActionPower()
+}
+function onSliderChanging(event: UniSliderChangeEvent) {
+	if (!powerOn.value || pendingAction.value.length > 0) return
+	forceValue.value = readSliderValue(event)
+	updateWorkingForce(forceValue.value)
+}
+function onSliderChange(event: UniSliderChangeEvent) {
+	if (!powerOn.value || pendingAction.value.length > 0) return
+	forceValue.value = readSliderValue(event)
+	updateWorkingForce(forceValue.value)
+}
+function decreaseForce() {
+	if (!powerOn.value || pendingAction.value.length > 0) return
+	forceValue.value = Math.max(5, forceValue.value - 1)
+	updateWorkingForce(forceValue.value)
+}
+function increaseForce() {
+	if (!powerOn.value || pendingAction.value.length > 0) return
+	forceValue.value = Math.min(55, forceValue.value + 1)
+	updateWorkingForce(forceValue.value)
+}
+function checkDoubleTap(): boolean {
+	const now = Date.now()
+	if (now - lastTapTs < 350) {
+		lastTapTs = 0
+		return true
+	}
+	lastTapTs = now
+	return false
+}
+function getVideoContext() { return uni.createVideoContext('freeActionVideo') }
+function playVideo() {
+	const ctx = getVideoContext()
+	if (ctx != null) ctx.play()
+}
+function handleVideoTap() {
+	if (!checkDoubleTap()) return
+	videoFullscreen.value = !videoFullscreen.value
+	playVideo()
+}
+function confirmSafety() {
+	showSafetyModal.value = false
+	setTimeout(() => { playVideo() }, 200)
+}
+function onVideoLoaded() { playVideo() }
+function onVideoEnded() {
+	const ctx = getVideoContext()
+	if (ctx != null) {
+		ctx.seek(0)
+		ctx.play()
+	}
+}
+function handleVideoError(event: UniVideoErrorEvent) { console.log('[FreeActionVideo] error: ' + JSON.stringify(event.detail)) }
+function handleFrame(frame: SerialFrame) {
+	if (flow.value != 'training' || !powerOn.value) return
+	if (needCaptureBaseline) {
+		countBaseline = frame.sportCount
+		needCaptureBaseline = false
+	}
+	if (Math.abs(frame.left.speed) > 10 || Math.abs(frame.right.speed) > 10) lastActiveTs = Date.now()
+	let currentCount = frame.sportCount - countBaseline
+	if (currentCount < 0) {
+		countBaseline = frame.sportCount
+		currentCount = 0
+	}
+	repCount.value = currentCount
+	calories.value = frame.calories
+	const action = getCurrentAction()
+	if (action != null && currentCount >= action.reps) handleSetCompleted(frame.sportCount)
+}
+function handleStatus(status: RuntimeStatus) { runtimeStatus.value = status }
+function closeExitModal() { showExitModal.value = false }
+function goBack() {
+	if (powerOn.value || flow.value == 'training' || flow.value == 'transitioning') {
+		showExitModal.value = true
+		return
+	}
+	uni.navigateBack()
+}
+function confirmExit() {
+	showExitModal.value = false
+	stopPowerOutput()
+	uni.navigateBack()
+}
+function goToActionLibrary() {
+	stopPowerOutput()
+	uni.redirectTo({ url: '/pages/freeTraining/action-library' })
+}
+
+onLoad(() => {
+	updateScreenSize()
+	actions.value = getTrainingActions()
+	if (actions.value.length == 0) {
+		uni.showToast({ title: '请先选择动作', icon: 'none' })
+	}
+	syncActionConfig()
+})
+onReady(() => { setTimeout(() => { playVideo() }, 200) })
+onMounted(() => {
+	runtimeStatus.value = getStatus()
+	onFrame(handleFrame)
+	onStatus(handleStatus)
+})
+onHide(() => { stopPowerOutput() })
+onBeforeUnmount(() => {
+	offFrame(handleFrame)
+	offStatus(handleStatus)
+	clearCountdown()
+	stopPowerOutput()
+})
+</script>
+
+<style>
+.page { position: relative; background-color: #F7F7F4; overflow: hidden; }
+.action-video { position: absolute; right: 24rpx; top: 250rpx; z-index: 8; width: 220rpx; height: 390rpx; border-radius: 18rpx; }
+.action-video.fullscreen { left: 0; top: 0; right: auto; width: 750rpx; height: 100%; border-radius: 0; z-index: 1; }
+.video-hit-layer { position: absolute; right: 24rpx; top: 250rpx; z-index: 9; width: 220rpx; height: 390rpx; background-color: rgba(0,0,0,0.001); }
+.video-hit-layer.fullscreen { left: 0; top: 0; right: auto; width: 750rpx; height: 100%; z-index: 4; }
+.nav-bar { position: absolute; left: 0; right: 0; top: 0; z-index: 20; height: 120rpx; padding: 20rpx 30rpx 0; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-round { width: 60rpx; height: 60rpx; border-radius: 30rpx; background-color: rgba(58,58,60,0.82); align-items: center; justify-content: center; }
+.back-arrow { font-size: 56rpx; color: #FFFFFF; line-height: 60rpx; }
+.nav-title { font-size: 36rpx; font-weight: 700; color: #222222; }
+.nav-placeholder { width: 60rpx; }
+.content-layer { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 3; padding: 120rpx 30rpx 40rpx; }
+.content-layer.fullscreen { z-index: 7; }
+.stat-board { height: 110rpx; padding: 0 16rpx; border-radius: 20rpx; background-color: rgba(255,255,255,0.96); border-width: 2rpx; border-style: solid; border-color: rgba(0,0,0,0.06); flex-direction: row; align-items: center; justify-content: space-around; }
+.stat-item { align-items: center; }
+.stat-label { font-size: 22rpx; color: rgba(34,34,34,0.6); }
+.stat-value { margin-top: 5rpx; font-size: 30rpx; font-weight: 700; color: #222222; }
+.divider { width: 2rpx; height: 50rpx; background-color: rgba(0,0,0,0.08); }
+.spacer { flex: 1; align-items: center; justify-content: flex-end; padding-bottom: 20rpx; }
+.fs-hint { font-size: 22rpx; color: rgba(255,255,255,0.48); }
+.force-panel { padding: 20rpx 24rpx; margin-bottom: 20rpx; border-radius: 20rpx; background-color: rgba(255,255,255,0.96); border-width: 2rpx; border-style: solid; border-color: rgba(0,0,0,0.06); }
+.force-head { margin-bottom: 16rpx; flex-direction: row; align-items: center; justify-content: space-between; }
+.mode-text { font-size: 26rpx; color: rgba(34,34,34,0.65); }
+.force-text { font-size: 48rpx; font-weight: 700; color: #4CAF50; }
+.slider-row { flex-direction: row; align-items: center; }
+.step-btn { width: 80rpx; height: 80rpx; border-radius: 40rpx; background-color: rgba(0,0,0,0.08); align-items: center; justify-content: center; }
+.step-btn.disabled { opacity: 0.4; }
+.step-text { font-size: 52rpx; color: #222222; line-height: 56rpx; }
+.force-slider { flex: 1; margin-left: 16rpx; margin-right: 16rpx; }
+.power-btn { height: 100rpx; margin-bottom: 50rpx; border-radius: 50rpx; background-color: rgba(76,175,80,0.95); align-items: center; justify-content: center; }
+.power-btn.running { background-color: rgba(244,67,54,0.95); }
+.power-btn.pending { opacity: 0.7; }
+.power-text { font-size: 36rpx; font-weight: 700; color: #FFFFFF; }
+.modal-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 100; background-color: rgba(0,0,0,0.65); align-items: center; justify-content: center; }
+.modal-card { width: 600rpx; padding: 40rpx; border-radius: 24rpx; background-color: #FFFFFF; }
+.center-card { align-items: center; }
+.modal-title { margin-bottom: 24rpx; text-align: center; font-size: 36rpx; font-weight: 700; color: #333333; }
+.modal-item { margin-bottom: 6rpx; font-size: 26rpx; line-height: 48rpx; color: #555555; }
+.modal-copy { font-size: 28rpx; line-height: 42rpx; color: #444444; text-align: center; }
+.sub-copy { margin-top: 12rpx; font-size: 24rpx; color: #777777; }
+.modal-confirm { height: 84rpx; min-width: 280rpx; padding: 0 34rpx; margin-top: 30rpx; border-radius: 42rpx; background-color: #4CAF50; align-items: center; justify-content: center; }
+.modal-confirm-text { font-size: 30rpx; font-weight: 700; color: #FFFFFF; }
+.modal-actions { width: 100%; margin-top: 30rpx; flex-direction: row; justify-content: space-between; }
+.modal-action { width: 240rpx; height: 80rpx; border-radius: 40rpx; align-items: center; justify-content: center; }
+.modal-action.cancel { background-color: #F1F2F4; }
+.modal-action.ok { background-color: #4CAF50; }
+.modal-action-text { font-size: 26rpx; font-weight: 700; color: #333333; }
+.ok-text { color: #FFFFFF; }
+</style>

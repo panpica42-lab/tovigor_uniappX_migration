@@ -1,0 +1,35 @@
+<template>
+	<view class="back-btn" @click="handleClick">
+		<image class="back-icon" src="/static/icons/general/btn_general_back.svg" mode="widthFix" />
+	</view>
+</template>
+
+<script setup lang="uts">
+const props = defineProps<{
+	useDefault?: boolean
+}>()
+const emit = defineEmits(['click'])
+
+function handleClick() {
+	emit('click')
+	if (props.useDefault == false) return
+	uni.navigateBack()
+}
+</script>
+
+<style>
+.back-btn {
+	width: 70rpx;
+	height: 70rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 35rpx;
+	background-color: transparent;
+}
+
+.back-icon {
+	width: 38rpx;
+	height: 38rpx;
+}
+</style>

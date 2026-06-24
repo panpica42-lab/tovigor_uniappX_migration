@@ -1,0 +1,30 @@
+<template>
+	<view v-if="visible" class="finish-mask">
+		<view class="finish-card">
+			<image class="finish-img" src="/static/icons/partTrainingActivity/startTraining/finish-pop-up.jpg" mode="aspectFill" />
+			<text class="finish-title">训练完成</text>
+			<text class="finish-desc">本次训练已结束，记得补水和休息。</text>
+			<button class="finish-btn" @click="close">返回部位训练</button>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+defineProps<{
+	visible: boolean
+}>()
+const emit = defineEmits(['close'])
+
+function close() {
+	emit('close')
+}
+</script>
+
+<style>
+.finish-mask { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 100; background-color: rgba(0,0,0,0.55); align-items: center; justify-content: center; }
+.finish-card { width: 560rpx; padding: 24rpx; border-radius: 24rpx; background-color: #ffffff; align-items: center; }
+.finish-img { width: 512rpx; height: 220rpx; border-radius: 18rpx; }
+.finish-title { margin-top: 22rpx; font-size: 34rpx; font-weight: 700; color: #111827; }
+.finish-desc { margin-top: 10rpx; font-size: 24rpx; color: #64748b; }
+.finish-btn { margin-top: 26rpx; width: 420rpx; height: 78rpx; line-height: 78rpx; border-radius: 39rpx; background-color: #172033; color: #ffffff; font-size: 26rpx; }
+</style>

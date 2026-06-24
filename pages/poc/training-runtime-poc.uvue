@@ -1,0 +1,435 @@
+<template>
+	<scroll-view class="page" scroll-y>
+		<view class="section header">
+			<text class="title">Training Runtime POC</text>
+			<text class="subtitle">真实下位机串口闭环验证</text>
+		</view>
+
+		<view class="section">
+			<text class="section-title">串口</text>
+			<view class="form-row">
+				<text class="label">设备</text>
+				<input class="input" :value="serialPath" @input="onPathInput" />
+			</view>
+			<view class="form-row">
+				<text class="label">波特率</text>
+				<input class="input" type="number" :value="baudRateText" @input="onBaudInput" />
+			</view>
+			<view class="actions">
+				<button class="btn" @click="scanDevices">扫描</button>
+				<button class="btn primary" @click="connect">连接</button>
+				<button class="btn danger" @click="disconnect">断开</button>
+			</view>
+			<text class="hint">插件版本: {{ pluginText }}</text>
+			<text class="hint">设备列表: {{ deviceListText }}</text>
+			<text class="error" v-if="status.lastError.length > 0">{{ status.lastError }}</text>
+		</view>
+
+		<view class="section">
+			<text class="section-title">训练控制</text>
+			<view class="status-grid">
+				<view class="status-item">
+					<text class="status-label">连接</text>
+					<text class="status-value">{{ status.connected ? '已连接' : '未连接' }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">工作</text>
+					<text class="status-value">{{ status.working ? '输出中' : '停止' }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">A9 帧</text>
+					<text class="status-value">{{ status.frameCount }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">读取</text>
+					<text class="status-value">{{ status.rawCount }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Left</text>
+					<text class="status-value">{{ leftPortText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Right</text>
+					<text class="status-value">{{ rightPortText }}</text>
+				</view>
+			</view>
+			<view class="form-row">
+				<text class="label">力量</text>
+				<input class="input" type="number" :value="forceText" @input="onForceInput" />
+			</view>
+			<view class="actions">
+				<button class="btn" @click="startReadOnly">只读</button>
+				<button class="btn primary" @click="startPower">开启</button>
+				<button class="btn" @click="updateForce">更新力量</button>
+				<button class="btn danger" @click="stopPower">停力</button>
+			</view>
+		</view>
+
+		<view class="section">
+			<view class="section-head">
+				<text class="section-title">实时曲线</text>
+				<text class="metric">{{ liveDistanceText }}</text>
+			</view>
+			<ForceRealtimeBars
+				:values="historyDistances"
+				:live-value="liveDistance"
+				:max-value="80"
+				:slot-count="12"
+			/>
+		</view>
+
+		<view class="section">
+			<text class="section-title">下位机数据</text>
+			<view class="status-grid">
+				<view class="status-item">
+					<text class="status-label">左力</text>
+					<text class="status-value">{{ leftForceText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">右力</text>
+					<text class="status-value">{{ rightForceText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Left distance</text>
+					<text class="status-value">{{ leftDistanceText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Right distance</text>
+					<text class="status-value">{{ rightDistanceText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Left power</text>
+					<text class="status-value">{{ leftPowerText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">Right power</text>
+					<text class="status-value">{{ rightPowerText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">次数</text>
+					<text class="status-value">{{ sportCount }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">热量</text>
+					<text class="status-value">{{ caloriesText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">设定</text>
+					<text class="status-value">{{ setForceText }}</text>
+				</view>
+				<view class="status-item">
+					<text class="status-label">耗时</text>
+					<text class="status-value">{{ processCostMs }}ms</text>
+				</view>
+			</view>
+		</view>
+	</scroll-view>
+</template>
+
+<script setup lang="uts">
+import ForceRealtimeBars from '@/components/training/force-realtime-bars.uvue'
+import {
+	FORCE_MODE,
+	RuntimeStatus,
+	SerialFrame,
+	connectSerial,
+	disconnectSerial,
+	getStatus,
+	onFrame,
+	offFrame,
+	onStatus,
+	offStatus,
+	pluginVersion,
+	scanSerialDevices,
+	startReading,
+	startWorking,
+	stopForce,
+	updateWorkingForce
+} from '@/utils/serialRuntime.uts'
+import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_PORTS } from '@/utils/serialConfig.uts'
+
+const serialPath = ref(MOTOR_SERIAL_PATH)
+const baudRate = ref(MOTOR_BAUD_RATE)
+const forceValue = ref(15)
+const devices = ref<string[]>([])
+const status = ref<RuntimeStatus>(getStatus())
+const historyDistances = ref<number[]>([])
+const liveDistance = ref(0)
+const leftForce = ref(0)
+const rightForce = ref(0)
+const leftDistance = ref(0)
+const rightDistance = ref(0)
+const leftPower = ref(0)
+const rightPower = ref(0)
+const sportCount = ref(0)
+const calories = ref(0)
+const setForce = ref(0)
+const setForceMode = ref(0)
+const processCostMs = ref(0)
+let lastSportCount = -1
+
+function toDistanceCm(distance: number): number {
+	return Math.max(0, distance) / 10
+}
+
+const pluginText = computed(() => pluginVersion())
+const baudRateText = computed(() => `${baudRate.value}`)
+const forceText = computed(() => `${forceValue.value}`)
+const deviceListText = computed(() => devices.value.length == 0 ? '未扫描' : devices.value.join(', '))
+const liveDistanceText = computed(() => liveDistance.value > 0 ? `${liveDistance.value.toFixed(1)}cm` : '等待动作')
+const leftForceText = computed(() => `${leftForce.value.toFixed(1)}kg`)
+const rightForceText = computed(() => `${rightForce.value.toFixed(1)}kg`)
+const leftDistanceText = computed(() => `${toDistanceCm(leftDistance.value).toFixed(1)}cm / ${leftDistance.value}mm`)
+const rightDistanceText = computed(() => `${toDistanceCm(rightDistance.value).toFixed(1)}cm / ${rightDistance.value}mm`)
+const leftPowerText = computed(() => `${leftPower.value}W`)
+const rightPowerText = computed(() => `${rightPower.value}W`)
+const caloriesText = computed(() => `${(calories.value / 1000).toFixed(2)}kcal`)
+const setForceText = computed(() => `${setForce.value}kg / mode ${setForceMode.value}`)
+const leftPortText = computed(() => {
+	const side = status.value.sides.left
+	return (side.connected ? 'ON ' : 'OFF ') + MOTOR_SERIAL_PORTS.left.path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+})
+const rightPortText = computed(() => {
+	const side = status.value.sides.right
+	return (side.connected ? 'ON ' : 'OFF ') + MOTOR_SERIAL_PORTS.right.path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+})
+
+function readInputValue(event: UniInputEvent): string {
+	return `${event.detail.value}`
+}
+
+function onPathInput(event: UniInputEvent) {
+	serialPath.value = readInputValue(event)
+}
+
+function onBaudInput(event: UniInputEvent) {
+	const value = parseInt(readInputValue(event), 10)
+	if (!isNaN(value)) {
+		baudRate.value = value
+	}
+}
+
+function onForceInput(event: UniInputEvent) {
+	const value = parseInt(readInputValue(event), 10)
+	if (!isNaN(value)) {
+		forceValue.value = Math.max(5, Math.min(55, value))
+	}
+}
+
+function scanDevices() {
+	scanSerialDevices((result) => {
+		devices.value = result
+		if (result.length > 0) {
+			serialPath.value = result[0]
+		}
+	}, (message) => {
+		uni.showToast({ title: message, icon: 'none' })
+	})
+}
+
+function connect() {
+	connectSerial(serialPath.value, baudRate.value, () => {
+		uni.showToast({ title: '串口已连接', icon: 'none' })
+	}, (message) => {
+		uni.showToast({ title: message, icon: 'none' })
+	})
+}
+
+function disconnect() {
+	disconnectSerial()
+}
+
+function startReadOnly() {
+	startReading()
+}
+
+function startPower() {
+	startWorking(forceValue.value, FORCE_MODE.CONST, 200)
+}
+
+function updateForce() {
+	updateWorkingForce(forceValue.value, FORCE_MODE.CONST)
+}
+
+function stopPower() {
+	stopForce(800, 200)
+}
+
+function handleFrame(frame: SerialFrame) {
+	const start = Date.now()
+	leftForce.value = frame.left.instantForce
+	rightForce.value = frame.right.instantForce
+	leftDistance.value = frame.left.distance
+	rightDistance.value = frame.right.distance
+	leftPower.value = frame.left.power
+	rightPower.value = frame.right.power
+	sportCount.value = frame.sportCount
+	calories.value = frame.calories
+	setForce.value = frame.setForce
+	setForceMode.value = frame.setForceMode
+
+	const currentDistance = Math.max(toDistanceCm(frame.left.distance), toDistanceCm(frame.right.distance))
+	if (currentDistance >= 4) {
+		liveDistance.value = Math.max(liveDistance.value, currentDistance)
+	}
+	if (lastSportCount < 0) {
+		lastSportCount = frame.sportCount
+	}
+	if (frame.sportCount > lastSportCount) {
+		if (liveDistance.value > 0) {
+			historyDistances.value = [...historyDistances.value, liveDistance.value]
+		}
+		liveDistance.value = 0
+		lastSportCount = frame.sportCount
+	}
+	processCostMs.value = Date.now() - start
+}
+
+function handleStatus(nextStatus: RuntimeStatus) {
+	status.value = nextStatus
+}
+
+onMounted(() => {
+	onFrame(handleFrame)
+	onStatus(handleStatus)
+})
+
+onBeforeUnmount(() => {
+	offFrame(handleFrame)
+	offStatus(handleStatus)
+	stopForce(800, 200)
+})
+</script>
+
+<style>
+.page {
+	height: 100%;
+	background-color: #eef3f8;
+}
+
+.section {
+	margin: 24rpx;
+	padding: 24rpx;
+	border-radius: 16rpx;
+	background-color: #ffffff;
+}
+
+.header {
+	background-color: #16213a;
+}
+
+.title {
+	font-size: 40rpx;
+	font-weight: 700;
+	color: #ffffff;
+}
+
+.subtitle {
+	margin-top: 8rpx;
+	font-size: 24rpx;
+	color: #b7c5d8;
+}
+
+.section-title {
+	font-size: 30rpx;
+	font-weight: 700;
+	color: #172033;
+}
+
+.section-head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 18rpx;
+}
+
+.metric {
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #24a38b;
+}
+
+.form-row {
+	flex-direction: row;
+	align-items: center;
+	margin-top: 20rpx;
+}
+
+.label {
+	width: 120rpx;
+	font-size: 26rpx;
+	color: #56657a;
+}
+
+.input {
+	flex: 1;
+	height: 72rpx;
+	padding: 0 18rpx;
+	border-radius: 10rpx;
+	background-color: #f1f5f9;
+	font-size: 26rpx;
+	color: #172033;
+}
+
+.actions {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 20rpx;
+}
+
+.btn {
+	margin: 0 14rpx 14rpx 0;
+	padding: 0 24rpx;
+	height: 72rpx;
+	line-height: 72rpx;
+	border-radius: 10rpx;
+	background-color: #dbe4ef;
+	color: #172033;
+	font-size: 24rpx;
+}
+
+.primary {
+	background-color: #2563eb;
+	color: #ffffff;
+}
+
+.danger {
+	background-color: #dc2626;
+	color: #ffffff;
+}
+
+.hint {
+	margin-top: 10rpx;
+	font-size: 22rpx;
+	color: #64748b;
+}
+
+.error {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	color: #dc2626;
+}
+
+.status-grid {
+	flex-direction: row;
+	flex-wrap: wrap;
+	margin-top: 18rpx;
+}
+
+.status-item {
+	width: 50%;
+	padding: 12rpx 0;
+}
+
+.status-label {
+	font-size: 22rpx;
+	color: #64748b;
+}
+
+.status-value {
+	margin-top: 4rpx;
+	font-size: 30rpx;
+	font-weight: 700;
+	color: #172033;
+}
+</style>

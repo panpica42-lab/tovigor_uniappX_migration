@@ -1,0 +1,120 @@
+<template>
+	<view class="page">
+		<view class="header">
+			<CommonBackButton class="back" :useDefault="false" @click="handleBack" />
+			<text class="title">调整器械</text>
+		</view>
+
+		<scroll-view class="content" scroll-y="true" :show-scrollbar="false">
+			<view class="adjust-card">
+				<view class="param-col">
+					<view class="param-line"><text class="key">高度：</text><text class="value">K</text></view>
+					<view class="param-line"><text class="key">角度：</text><text class="value">5</text></view>
+					<view class="param-line"><text class="key">开启：</text><text class="value">30°</text></view>
+				</view>
+				<view class="preview" @click="playVideo">
+					<image class="preview-img" src="/static/icons/partTrainingActivity/startTraining/adjust-1.jpg" mode="aspectFill" />
+					<text class="preview-label">调整力量的视频</text>
+					<view class="play-corner"><image class="play-icon" src="/static/icons/partTrainingActivity/startTraining/btn-vedio-play.svg" mode="aspectFit" /></view>
+				</view>
+			</view>
+
+			<view class="section-row">
+				<view class="chip">
+					<image class="chip-icon" src="/static/icons/partTrainingActivity/startTraining/grip.jpg" mode="aspectFill" />
+					<text class="chip-text">握法展示</text>
+				</view>
+				<text class="section-title">器材准备</text>
+				<view class="play-round" @click="playVideo"><image class="play-icon" src="/static/icons/partTrainingActivity/startTraining/btn-vedio-play.svg" mode="aspectFit" /></view>
+			</view>
+
+			<view class="video-card large" @click="playVideo">
+				<image class="card-img" src="/static/icons/partTrainingActivity/startTraining/adjust-2.jpg" mode="aspectFill" />
+				<view class="play-center"><image class="play-icon" src="/static/icons/partTrainingActivity/startTraining/btn-vedio-play.svg" mode="aspectFit" /></view>
+			</view>
+
+			<view class="grid">
+				<view class="video-card half" @click="playVideo">
+					<image class="card-img" src="/static/icons/partTrainingActivity/startTraining/adjust-3.jpg" mode="aspectFill" />
+					<text class="card-tag">站立姿势</text>
+					<view class="play-corner"><image class="play-icon" src="/static/icons/partTrainingActivity/startTraining/btn-vedio-play.svg" mode="aspectFit" /></view>
+				</view>
+				<view class="video-card half muted" @click="playVideo">
+					<image class="card-img" src="/static/icons/partTrainingActivity/startTraining/adjust-4.jpg" mode="aspectFill" />
+					<text class="card-tag light">站姿肩关节环绕</text>
+					<view class="play-corner"><image class="play-icon" src="/static/icons/partTrainingActivity/startTraining/btn-vedio-play.svg" mode="aspectFit" /></view>
+				</view>
+			</view>
+		</scroll-view>
+
+		<view class="bottom-bar">
+			<button class="start-btn" @click="startWarmUp">开始训练</button>
+		</view>
+
+		<view v-if="showVideoModal" class="video-modal">
+			<view class="video-box">
+				<view class="close-btn" @click="closeVideo"><text class="close-text">×</text></view>
+				<video class="video" src="/static/icons/partTrainingActivity/startTraining/vedio-placeHolder.mp4" controls autoplay object-fit="contain" :show-center-play-btn="false" />
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
+
+const courseId = ref(1)
+const showVideoModal = ref(false)
+
+function playVideo() { showVideoModal.value = true }
+function closeVideo() { showVideoModal.value = false }
+function handleBack() { navigateBackOrReLaunch('/pages/partTraining/course-detail-adapter?id=' + courseId.value.toString()) }
+function startWarmUp() { uni.navigateTo({ url: '/pages/partTraining/warm-up-page?id=' + courseId.value.toString() }) }
+
+onLoad((options: OnLoadOptions) => {
+	if (options['id'] != null) {
+		const parsed = parseInt(`${options['id']}`, 10)
+		if (!isNaN(parsed)) courseId.value = parsed
+	}
+})
+</script>
+
+<style>
+.page { position: relative; width: 750rpx; height: 100%; background-color: #f2f3f5; display: flex; flex-direction: column; overflow: hidden; }
+.header { position: relative; height: 104rpx; padding-top: 16rpx; align-items: center; justify-content: center; background-color: #f2f3f5; }
+.back { position: absolute; left: 24rpx; top: 18rpx; }
+.title { font-size: 36rpx; font-weight: 700; color: #222222; }
+.content { flex: 1; min-height: 0; padding: 16rpx 24rpx 140rpx; }
+.adjust-card { height: 236rpx; padding: 16rpx; border-radius: 24rpx; background-color: #e9eaee; display: flex; flex-direction: row; align-items: center; }
+.param-col { width: 174rpx; padding-left: 6rpx; }
+.param-line { display: flex; flex-direction: row; align-items: center; height: 44rpx; }
+.key { font-size: 26rpx; color: #222222; }
+.value { font-size: 26rpx; font-weight: 700; color: #111111; }
+.preview { position: relative; flex: 1; height: 204rpx; border-radius: 20rpx; overflow: hidden; }
+.preview-img, .card-img { width: 100%; height: 100%; }
+.preview-label { position: absolute; left: 20rpx; bottom: 18rpx; font-size: 26rpx; font-weight: 700; color: #ffffff; }
+.play-corner { position: absolute; right: 16rpx; top: 16rpx; width: 52rpx; height: 52rpx; border-radius: 26rpx; background-color: rgba(255,255,255,0.8); align-items: center; justify-content: center; }
+.play-icon { width: 30rpx; height: 30rpx; }
+.section-row { height: 92rpx; display: flex; flex-direction: row; align-items: center; }
+.chip { width: 170rpx; height: 58rpx; border-radius: 29rpx; background-color: #ffffff; display: flex; flex-direction: row; align-items: center; padding-left: 8rpx; }
+.chip-icon { width: 42rpx; height: 42rpx; border-radius: 21rpx; }
+.chip-text { margin-left: 8rpx; font-size: 22rpx; color: #333333; }
+.section-title { flex: 1; text-align: center; font-size: 32rpx; font-weight: 700; color: #222222; }
+.play-round { width: 58rpx; height: 58rpx; border-radius: 29rpx; background-color: #ffffff; align-items: center; justify-content: center; }
+.video-card { position: relative; overflow: hidden; border-radius: 24rpx; background-color: #d7dbe2; }
+.large { height: 330rpx; margin-bottom: 18rpx; }
+.play-center { position: absolute; left: 321rpx; top: 139rpx; width: 60rpx; height: 60rpx; border-radius: 30rpx; background-color: rgba(255,255,255,0.82); align-items: center; justify-content: center; }
+.grid { display: flex; flex-direction: row; padding-bottom: 22rpx; }
+.half { width: 342rpx; height: 230rpx; margin-right: 18rpx; }
+.half.muted { margin-right: 0; }
+.card-tag { position: absolute; left: 20rpx; bottom: 18rpx; font-size: 26rpx; font-weight: 700; color: #ffffff; }
+.card-tag.light { color: #ffffff; }
+.bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; height: 120rpx; padding: 18rpx 32rpx; background-color: #f2f3f5; }
+.start-btn { height: 84rpx; line-height: 84rpx; border-radius: 42rpx; background-color: #1f2a44; color: #ffffff; font-size: 28rpx; font-weight: 700; }
+.video-modal { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-color: rgba(0,0,0,0.66); align-items: center; justify-content: center; }
+.video-box { position: relative; width: 680rpx; height: 420rpx; border-radius: 18rpx; overflow: hidden; background-color: #000000; }
+.video { width: 680rpx; height: 420rpx; }
+.close-btn { position: absolute; right: 14rpx; top: 14rpx; z-index: 2; width: 48rpx; height: 48rpx; border-radius: 24rpx; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+.close-text { font-size: 34rpx; color: #ffffff; }
+</style>

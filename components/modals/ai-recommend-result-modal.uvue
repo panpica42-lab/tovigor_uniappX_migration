@@ -1,0 +1,61 @@
+<template>
+	<view v-if="visible" class="result-overlay">
+		<view class="result-mask" @click="close"></view>
+		<view class="result-shell">
+			<view class="result-close" @click="close">
+				<text class="result-close-text">×</text>
+			</view>
+
+			<view class="result-banner">
+				<text class="result-banner-text">已推荐最适合的健身课程</text>
+				<image class="result-banner-avatar" src="/static/icons/partTrainingActivity/AI_coach_Vince.png" mode="aspectFit" />
+			</view>
+
+			<view class="result-card">
+				<text class="result-title">{{ course.title }}</text>
+				<view class="result-body">
+					<CourseDetailContent
+						:course="course"
+						:showHeader="false"
+						:showIntroCard="false"
+						:embedded="true"
+						@start="handleStartTraining"
+					/>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CourseDetailContent from '@/pages/partTraining/components/course-detail-content.uvue'
+import { PartTrainingCourse } from '@/pages/partTraining/course-data.uts'
+
+const props = defineProps<{
+	visible: boolean
+	course: PartTrainingCourse
+}>()
+const emit = defineEmits(['close', 'startTraining'])
+
+function close() {
+	emit('close')
+}
+
+function handleStartTraining(course: PartTrainingCourse) {
+	emit('startTraining', course)
+}
+</script>
+
+<style>
+.result-overlay { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 9999; background-color: rgba(0,0,0,0.24); align-items: center; justify-content: center; padding: 18rpx; }
+.result-mask { position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 0; }
+.result-shell { position: relative; z-index: 2; width: 620rpx; padding-top: 76rpx; }
+.result-close { position: absolute; left: 4rpx; top: 8rpx; z-index: 3; width: 52rpx; height: 52rpx; border-radius: 26rpx; background-color: rgba(191,225,252,0.96); border-width: 4rpx; border-style: solid; border-color: #1D2939; align-items: center; justify-content: center; }
+.result-close-text { font-size: 30rpx; line-height: 32rpx; font-weight: 700; color: #111111; }
+.result-banner { position: absolute; right: 0; top: 0; z-index: 2; width: 556rpx; height: 68rpx; padding-left: 24rpx; padding-right: 94rpx; border-radius: 34rpx; background-color: #65b1fe; flex-direction: row; align-items: center; box-shadow: 0 10rpx 24rpx rgba(76,148,236,0.24); }
+.result-banner-text { font-size: 20rpx; font-weight: 600; color: #ffffff; }
+.result-banner-avatar { position: absolute; right: 8rpx; bottom: 0; width: 88rpx; height: 88rpx; }
+.result-card { width: 620rpx; height: 78%; padding: 24rpx 22rpx 20rpx; border-radius: 30rpx; background-color: #ffffff; box-shadow: 0 22rpx 52rpx rgba(0,0,0,0.16); display: flex; flex-direction: column; overflow: hidden; }
+.result-title { text-align: center; font-size: 29rpx; font-weight: 700; color: #1F2937; margin-bottom: 12rpx; }
+.result-body { width: 576rpx; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
+</style>
