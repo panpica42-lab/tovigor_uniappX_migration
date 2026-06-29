@@ -1,0 +1,99 @@
+﻿<template>
+	<view v-if="visible" class="modal-overlay">
+		<view class="modal-card">
+			<view class="modal-header">
+				<view class="handle-bar"></view>
+				<view class="title-section">
+					<image class="icon-left" src="/static/icons/smartAssessActivity/li-liang/pop-up_elementA.png" mode="aspectFit" />
+					<text class="title-text">已完成{{ currentPartName }}</text>
+					<image class="icon-right" src="/static/icons/smartAssessActivity/li-liang/pop-up_elementB.png" mode="aspectFit" />
+				</view>
+				<text class="subtitle-text">{{ countdown }}S后自动跳转{{ nextPartName }}评估</text>
+			</view>
+			<view class="modal-footer">
+				<button class="btn btn-primary" @click="handleStart">直接开始</button>
+				<button class="btn btn-secondary" @click="handleCancel">取消</button>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { getBodyPartName } from '@/pages/smartAssess/body-strength-assess/strength-assess-config.uts'
+
+const props = defineProps<{
+	visible: boolean
+	currentPartId: string
+	nextPartId: string
+	countdownSeconds: number
+}>()
+
+const emit = defineEmits(['start', 'cancel', 'timeout'])
+const countdown = ref(5)
+let countdownTimer = 0
+
+const currentPartName = computed<string>(() => getBodyPartName(props.currentPartId))
+const nextPartName = computed<string>(() => getBodyPartName(props.nextPartId))
+
+function stopCountdown() {
+	if (countdownTimer > 0) {
+		clearInterval(countdownTimer)
+		countdownTimer = 0
+	}
+}
+
+function startCountdown() {
+	stopCountdown()
+	countdown.value = props.countdownSeconds
+	countdownTimer = setInterval(() => {
+		countdown.value -= 1
+		if (countdown.value <= 0) {
+			stopCountdown()
+			emit('timeout')
+		}
+	}, 1000)
+}
+
+function handleStart() {
+	stopCountdown()
+	emit('start')
+}
+
+function handleCancel() {
+	stopCountdown()
+	emit('cancel')
+}
+
+function getVisible(): boolean {
+	return props.visible
+}
+
+function handleVisibleChange(nextVisible: boolean) {
+	if (nextVisible) startCountdown()
+	else stopCountdown()
+}
+
+watch(getVisible, handleVisibleChange)
+
+onBeforeUnmount(() => {
+	stopCountdown()
+})
+</script>
+
+<style>
+.modal-overlay { position: fixed; left: 0; right: 0; top: 0; bottom: 0; z-index: 999; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 60rpx; }
+.modal-card { width: 600rpx; overflow: hidden; border-radius: 32rpx; background-color: #ffffff; box-shadow: 0 16rpx 48rpx rgba(0,0,0,0.2); }
+.modal-header { padding: 32rpx 40rpx 40rpx; align-items: center; background-color: #23c761; }
+.handle-bar { width: 80rpx; height: 8rpx; margin-bottom: 24rpx; border-radius: 4rpx; background-color: rgba(255,255,255,0.8); }
+.title-section { display: flex; flex-direction: row; align-items: center; justify-content: center; margin-bottom: 20rpx; }
+.icon-left { width: 60rpx; height: 60rpx; margin-right: 16rpx; }
+.icon-right { width: 120rpx; height: 120rpx; margin-left: 16rpx; }
+.title-text { font-size: 40rpx; font-weight: 700; color: #ffffff; }
+.subtitle-text { font-size: 26rpx; color: rgba(255,255,255,0.9); }
+.modal-footer { display: flex; flex-direction: row; padding: 40rpx; background-color: #ffffff; }
+.btn { flex: 1; height: 88rpx; line-height: 88rpx; border-radius: 24rpx; font-size: 32rpx; font-weight: 600; }
+.btn-primary { margin-right: 10rpx; background-color: #23c761; color: #ffffff; }
+.btn-secondary { margin-left: 10rpx; background-color: #e0e0e0; color: #666666; }
+</style>
+
+

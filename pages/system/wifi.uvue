@@ -42,7 +42,7 @@
 						<view class="network-row" @click="selectWifi(item)">
 							<view class="network-left">
 								<text class="network-name">{{ item.ssid }}</text>
-								<text v-if="isSelectedWifi(item)" class="network-status">{{ item.secure ? '安全' : '开放网络' }}</text>
+								<text v-if="isSelectedWifi(item)" class="network-status">{{ getNetworkStatus(item) }}</text>
 							</view>
 						</view>
 
@@ -93,7 +93,7 @@ import {
 } from '@/utils/system/wifi/wifi-service.uts'
 
 function createEmptyWifi(): WifiItem {
-	return { ssid: '', bssid: '', secure: false, signalStrength: 0 }
+	return { ssid: '', bssid: '', secure: false, securityType: 'NONE', signalStrength: 0 }
 }
 
 const wifiEnabled = ref(true)
@@ -217,6 +217,13 @@ function isSelectedWifi(item: WifiItem): boolean {
 	return selected.ssid == item.ssid
 }
 
+function getNetworkStatus(item: WifiItem): string {
+	if (item.securityType == 'EAP') return '企业网络'
+	if (item.securityType == 'WPA3') return 'WPA3 安全'
+	if (item.secure) return '安全'
+	return '开放网络'
+}
+
 function selectWifi(item: WifiItem) {
 	selectedWifi.value = item
 	wifiPassword.value = ''
@@ -237,6 +244,11 @@ function connectWifi() {
 	const selected = selectedWifi.value
 	if (selected == null) return
 
+	if (selected.securityType == 'EAP') {
+		showToast('企业/校园网需要账号和证书配置，当前不支持单密码直连')
+		return
+	}
+
 	if (selected.secure && wifiPassword.value.trim().length == 0) {
 		showToast('请输入 WiFi 密码')
 		return
@@ -246,7 +258,8 @@ function connectWifi() {
 		ssid: selected.ssid,
 		bssid: selected.bssid,
 		password: wifiPassword.value,
-		secure: selected.secure
+		secure: selected.secure,
+		securityType: selected.securityType
 	})
 		.then((result) => {
 			if (result.manualConnect) {
@@ -282,6 +295,8 @@ onBeforeUnmount(() => {
 	padding: 72rpx 18rpx 32rpx;
 	box-sizing: border-box;
 	background: #efefef;
+	display: flex;
+	flex-direction: column;
 }
 
 .header {
@@ -325,6 +340,10 @@ onBeforeUnmount(() => {
 	border-radius: 34rpx;
 	padding: 28rpx 20rpx;
 	box-sizing: border-box;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
 }
 
 .section {
@@ -389,6 +408,10 @@ onBeforeUnmount(() => {
 .section-list {
 	padding-top: 18rpx;
 	padding-bottom: 18rpx;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
 }
 
 .section-head {
@@ -419,7 +442,8 @@ onBeforeUnmount(() => {
 }
 
 .network-scroll {
-	max-height: 520rpx;
+	flex: 1;
+	height: 0;
 }
 
 .network-card {

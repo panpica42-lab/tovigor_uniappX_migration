@@ -164,8 +164,16 @@ const PART_TRAINING_WARMUP_DELAY_MS = 500
 const PART_TRAINING_WARMUP_COVER_COUNT = 4
 const TRAINING_BACKGROUND_POSTER = '/static/icons/general/video-placeholder-2-poster.jpg'
 
+function getInitialCourseScrollHeight(): number {
+	const systemInfo = uni.getSystemInfoSync()
+	const rpxToPx = systemInfo.windowWidth / 750
+	const fixedRpx = 795
+	const nextHeight = Math.floor(systemInfo.windowHeight - fixedRpx * rpxToPx)
+	return Math.max(180, nextHeight)
+}
+
 const courseList = ref<PartTrainingCourse[]>(partTrainingCourses)
-const courseScrollHeight = ref(240)
+const courseScrollHeight = ref(getInitialCourseScrollHeight())
 const showGuideModal = ref(false)
 const showBrightnessModal = ref(false)
 const brightnessValue = ref(60)
@@ -272,7 +280,7 @@ function goToPartTraining() {
 }
 
 function goToSmartAssess() {
-	showUnavailable('智能评估')
+	uni.navigateTo({ url: '/pages/smartAssess/first-skip' })
 }
 
 function goToFlappyBird() {
@@ -285,14 +293,6 @@ function goToSerialPoc() {
 
 function handleCourseClick(id: number) {
 	uni.navigateTo({ url: '/pages/partTraining/course-detail-adapter?id=' + id.toString() })
-}
-
-function calcCourseScrollHeight() {
-	const systemInfo = uni.getSystemInfoSync()
-	const rpxToPx = systemInfo.windowWidth / 750
-	const fixedRpx = 795
-	const nextHeight = Math.floor(systemInfo.windowHeight - fixedRpx * rpxToPx)
-	courseScrollHeight.value = Math.max(180, nextHeight)
 }
 
 function warmupImage(src: string) {
@@ -324,8 +324,7 @@ function schedulePartTrainingWarmup() {
 	}, PART_TRAINING_WARMUP_DELAY_MS)
 }
 
-onMounted(() => {
-	calcCourseScrollHeight()
+onReady(() => {
 	schedulePartTrainingWarmup()
 })
 

@@ -8,9 +8,13 @@ export type MotorSerialPortsConfig = {
 	right: MotorSerialSideConfig
 }
 
-export const MOTOR_BAUD_RATE = 115200
+export type MotorSerialProfile = string
+export type MotorSerialMode = string
 
-export const MOTOR_SERIAL_PORTS: MotorSerialPortsConfig = {
+export const MOTOR_BAUD_RATE = 115200
+export const MOTOR_SERIAL_PROFILE: MotorSerialProfile = 'bench' // sample: 双电机样机；bench: 单电机调试架
+
+const MOTOR_SAMPLE_SERIAL_PORTS: MotorSerialPortsConfig = {
 	left: {
 		path: '/dev/ttyS6',
 		baudRate: MOTOR_BAUD_RATE
@@ -21,5 +25,19 @@ export const MOTOR_SERIAL_PORTS: MotorSerialPortsConfig = {
 	}
 }
 
-// Legacy primary path for older debug controls. The runtime now opens both sides.
+const MOTOR_BENCH_SERIAL_PORTS: MotorSerialPortsConfig = {
+	left: {
+		path: '/dev/ttyS9',
+		baudRate: MOTOR_BAUD_RATE
+	},
+	right: {
+		path: '',
+		baudRate: MOTOR_BAUD_RATE
+	}
+}
+
+export const MOTOR_SERIAL_MODE: MotorSerialMode = MOTOR_SERIAL_PROFILE == 'bench' ? 'single' : 'dual'
+export const MOTOR_SERIAL_PORTS: MotorSerialPortsConfig = MOTOR_SERIAL_PROFILE == 'bench' ? MOTOR_BENCH_SERIAL_PORTS : MOTOR_SAMPLE_SERIAL_PORTS
+
+// Legacy primary path for older debug controls. The runtime selects enabled ports by profile.
 export const MOTOR_SERIAL_PATH = MOTOR_SERIAL_PORTS.left.path

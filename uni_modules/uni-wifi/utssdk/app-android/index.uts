@@ -9,6 +9,7 @@ import ActivityCompat from "androidx.core.app.ActivityCompat";
 import IntentFilter from "android.content.IntentFilter";
 import Intent from "android.content.Intent";
 import ConnectivityManager from "android.net.ConnectivityManager";
+import MacAddress from "android.net.MacAddress";
 import Network from "android.net.Network";
 import NetworkCapabilities from "android.net.NetworkCapabilities";
 import NetworkRequest from "android.net.NetworkRequest";
@@ -219,10 +220,12 @@ function wrapWifiConfiguration(SSID : string, password ?: string, passwordType :
 function getSecurityType(result : ScanResult) : string {
 	if (result.capabilities.contains("WEP")) {
 		return "WEP";
-	} else if (result.capabilities.contains("PSK")) {
-		return "WPA";
 	} else if (result.capabilities.contains("EAP")) {
 		return "EAP";
+	} else if (result.capabilities.contains("SAE") && !result.capabilities.contains("PSK")) {
+		return "WPA3";
+	} else if (result.capabilities.contains("PSK")) {
+		return "WPA";
 	}
 	return "NONE";
 }
@@ -736,6 +739,19 @@ function realWifiConnectBySpecifier(option : WifiConnectOption, scanWifiInfo : A
 
 	let specifierBuilder = new WifiNetworkSpecifier.Builder()
 	specifierBuilder.setSsid(scanWifiInfo.SSID)
+	if (scanWifiInfo.BSSID != null && scanWifiInfo.BSSID!.length > 0) {
+		try {
+			specifierBuilder.setBssid(MacAddress.fromString(scanWifiInfo.BSSID!))
+		} catch (e) {
+			console.log(e)
+		}
+	}
+	if (scanWifiInfo.securityType == "EAP" || scanWifiInfo.securityType == "WEP") {
+		let err = new WifiFailImpl(getErrcode(12001))
+		option.fail?.(err)
+		option.complete?.(err)
+		return
+	}
 	if (scanWifiInfo.secure) {
 		if (option.password == null || option.password!.length == 0) {
 			let err = new WifiFailImpl(getErrcode(12002))
@@ -743,12 +759,17 @@ function realWifiConnectBySpecifier(option : WifiConnectOption, scanWifiInfo : A
 			option.complete?.(err)
 			return
 		}
-		specifierBuilder.setWpa2Passphrase(option.password!)
+		if (scanWifiInfo.securityType == "WPA3") {
+			specifierBuilder.setWpa3Passphrase(option.password!)
+		} else {
+			specifierBuilder.setWpa2Passphrase(option.password!)
+		}
 	}
 
 	let specifier = specifierBuilder.build()
 	let request = new NetworkRequest.Builder()
 		.addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+		.removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 		.setNetworkSpecifier(specifier)
 		.build()
 
@@ -815,6 +836,16 @@ export function stopWifi(option : StopWifiOptions) {
 		option.complete?.(err)
 
 		return
+	}
+	const context = UTSAndroid.getAppContext()
+	if (context != null && Global.networkCallback != null) {
+		let connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+		try {
+			connectivityManager.unregisterNetworkCallback(Global.networkCallback!)
+		} catch (e) {
+		}
+		connectivityManager.bindProcessToNetwork(null)
+		Global.networkCallback = null
 	}
 	try {
 		UTSAndroid.getUniActivity()!.unregisterReceiver(Global.mReceiver)

@@ -1,0 +1,399 @@
+<template>
+	<view class="page">
+		<image class="background-image" src="/static/icons/smartAssessActivity/li-liang/bg_powerful_Girl.png" mode="aspectFill" />
+
+		<view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+			<view class="nav-content">
+				<view class="back-btn" @click="goBack">
+					<image class="back-icon" src="/static/icons/smartAssessActivity/li-liang/btn_back.svg" mode="aspectFit" />
+				</view>
+				<text class="nav-title">力量评估</text>
+			</view>
+		</view>
+
+		<view class="coach-dialog-section" :style="{ top: (statusBarHeight + 88) + 'px' }">
+			<CoachBoxEntry
+				text="点击我可以切换AI教练哦~"
+				bubbleWidth="420rpx"
+				contentBackground="rgba(255,255,255,0.85)"
+				:clickable="true"
+			/>
+		</view>
+
+		<view class="debug-panel">
+			<text class="debug-title">Debug Panel</text>
+			<view class="debug-row">
+				<text class="debug-label">连接:</text>
+				<text class="debug-value">{{ runtimeConnectedText }}</text>
+			</view>
+			<view class="debug-row">
+				<text class="debug-label">设定力量:</text>
+				<text class="debug-value">{{ debugSetForce }} kg</text>
+			</view>
+			<view class="debug-row">
+				<text class="debug-label">左次数:</text>
+				<text class="debug-value">{{ debugLeftCount }}</text>
+			</view>
+			<view class="debug-row">
+				<text class="debug-label">右次数:</text>
+				<text class="debug-value">{{ debugRightCount }}</text>
+			</view>
+		</view>
+
+		<view class="strength-bars-section" :style="{ top: (statusBarHeight + 248) + 'px' }">
+			<StrengthBarCard label="第1-2次" :firstValue="rep1" :secondValue="rep2" :maxValue="90" unit="CM" />
+			<StrengthBarCard label="第3-4次" :firstValue="rep3" :secondValue="rep4" :maxValue="90" unit="CM" />
+			<StrengthBarCard label="第5-6次" :firstValue="rep5" :secondValue="rep6" :maxValue="90" unit="CM" />
+		</view>
+
+		<view class="thumbnail-section">
+			<view class="thumbnail-container" @click="handleThumbnailClick">
+				<image class="thumbnail-content" src="/static/icons/smartAssessActivity/li-liang/pic_thumbnail_image.jpg" mode="aspectFill" />
+				<image class="play-icon-img" src="/static/icons/general/btn_playing.svg" mode="aspectFit" />
+			</view>
+		</view>
+
+		<view class="start-btn-section">
+			<button class="start-assess-btn" :class="{ disabled: isAssessing }" @click="handleStartAssess">
+				{{ isAssessing ? '评估中...' : '开始评估' }}
+			</button>
+		</view>
+
+		<view class="body-parts-section">
+			<view class="parts-main-btn">
+				<text class="parts-main-text">部位</text>
+				<text class="parts-main-text">选择</text>
+			</view>
+			<scroll-view class="parts-scroll" scroll-x="true" :show-scrollbar="false">
+				<view class="parts-list">
+					<view
+						v-for="part in bodyParts"
+						:key="part.id"
+						class="part-item"
+						:class="{ active: selectedPartId == part.id }"
+						@click="selectPart(part.id)"
+					>
+						<image class="part-icon" :src="part.icon" mode="aspectFit" />
+						<text class="part-name">{{ part.name }}</text>
+					</view>
+				</view>
+			</scroll-view>
+		</view>
+
+		<AssessmentCompleteModal
+			:visible="showCompleteModal"
+			:currentPartId="selectedPartId"
+			:nextPartId="nextPartId"
+			:countdownSeconds="5"
+			@start="handleStartNext"
+			@cancel="handleCancelNext"
+			@timeout="handleTimeout"
+		/>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+import AssessmentCompleteModal from '@/components/modals/assessment-complete-modal.uvue'
+import StrengthBarCard from './components/strength-bar-card.uvue'
+import {
+	FORCE_MODE,
+	SerialFrame,
+	RuntimeStatus,
+	getStatus,
+	onFrame,
+	offFrame,
+	onStatus,
+	offStatus,
+	startWorking,
+	updateWorkingForce,
+	stopForce
+} from '@/utils/serialRuntime.uts'
+import {
+	BodyPartMeta,
+	bodyPartList,
+	buildStrengthResult,
+	getBodyPartBaseForce,
+	getBodyPartName,
+	getPartIndex,
+	getStoredStrengthResults,
+	mergeStrengthResult,
+	saveStrengthResults
+} from './strength-assess-config.uts'
+
+const statusBarHeight = ref(0)
+const bodyParts = ref<BodyPartMeta[]>(bodyPartList)
+const selectedPartId = ref('shoulder')
+const isAssessing = ref(false)
+const showCompleteModal = ref(false)
+const runtimeStatus = ref<RuntimeStatus>(getStatus())
+
+const rep1 = ref(0)
+const rep2 = ref(0)
+const rep3 = ref(0)
+const rep4 = ref(0)
+const rep5 = ref(0)
+const rep6 = ref(0)
+
+const debugSetForce = ref(0)
+const debugLeftCount = ref(0)
+const debugRightCount = ref(0)
+
+let completeModalTimer = 0
+let lastCount = -1
+let currentPeakDistanceMm = 0
+let completedRepCount = 0
+let repDistancesCm: number[] = []
+
+const runtimeConnectedText = computed<string>(() => runtimeStatus.value.connected ? '已连接' : '未连接')
+const currentPartIndex = computed<number>(() => getPartIndex(selectedPartId.value))
+const hasNextPart = computed<boolean>(() => currentPartIndex.value >= 0 && currentPartIndex.value < bodyParts.value.length - 1)
+const nextPartId = computed<string>(() => {
+	if (!hasNextPart.value) return selectedPartId.value
+	return bodyParts.value[currentPartIndex.value + 1].id
+})
+
+function resetBars() {
+	rep1.value = 0
+	rep2.value = 0
+	rep3.value = 0
+	rep4.value = 0
+	rep5.value = 0
+	rep6.value = 0
+}
+
+function resetAssessState() {
+	lastCount = -1
+	currentPeakDistanceMm = 0
+	completedRepCount = 0
+	repDistancesCm = []
+	resetBars()
+}
+
+function clearFinishTimer() {
+	if (completeModalTimer > 0) {
+		clearTimeout(completeModalTimer)
+		completeModalTimer = 0
+	}
+}
+
+function setDistanceBarValue(index: number, distanceCm: number) {
+	const safeDistance = Math.max(0, Math.round(distanceCm))
+	if (index == 0) rep1.value = safeDistance
+	if (index == 1) rep2.value = safeDistance
+	if (index == 2) rep3.value = safeDistance
+	if (index == 3) rep4.value = safeDistance
+	if (index == 4) rep5.value = safeDistance
+	if (index == 5) rep6.value = safeDistance
+}
+
+function saveCurrentPartResult() {
+	let peakDistanceCm = 0
+	for (let i = 0; i < repDistancesCm.length; i += 1) {
+		peakDistanceCm = Math.max(peakDistanceCm, repDistancesCm[i])
+	}
+	const currentResults = getStoredStrengthResults()
+	const nextResult = buildStrengthResult(selectedPartId.value, peakDistanceCm, repDistancesCm)
+	saveStrengthResults(mergeStrengthResult(currentResults, nextResult))
+	console.log('[StrengthAssess] saved result part=' + selectedPartId.value + ' peak=' + Math.round(peakDistanceCm).toString())
+}
+
+function goToResultPage() {
+	uni.redirectTo({ url: '/pages/smartAssess/body-strength-assess/strength-result' })
+}
+
+function finishCurrentAssessment() {
+	saveCurrentPartResult()
+	clearFinishTimer()
+	if (!hasNextPart.value) {
+		stopForce(800, 200)
+		isAssessing.value = false
+		showCompleteModal.value = false
+		goToResultPage()
+		return
+	}
+	completeModalTimer = setTimeout(() => {
+		completeModalTimer = 0
+		showCompleteModal.value = true
+	}, 1000)
+}
+
+function commitRepPeakDistance() {
+	if (completedRepCount >= 6) return
+	const peakDistanceCm = currentPeakDistanceMm / 10
+	setDistanceBarValue(completedRepCount, peakDistanceCm)
+	repDistancesCm.push(peakDistanceCm)
+	completedRepCount += 1
+	currentPeakDistanceMm = 0
+	if (completedRepCount >= 6) finishCurrentAssessment()
+}
+
+function applyAssessForce(force: number, seamless: boolean) {
+	if (seamless) {
+		updateWorkingForce(force, FORCE_MODE.CONST)
+		return
+	}
+	startWorking(force, FORCE_MODE.CONST, 200)
+}
+
+function startSelectedPartAssess(silentToast: boolean, seamless: boolean) {
+	if (isAssessing.value) return
+	runtimeStatus.value = getStatus()
+	if (!runtimeStatus.value.connected) {
+		uni.showToast({ title: '设备未连接', icon: 'none' })
+		return
+	}
+	showCompleteModal.value = false
+	clearFinishTimer()
+	resetAssessState()
+	const baseForce = getBodyPartBaseForce(selectedPartId.value)
+	applyAssessForce(baseForce, seamless)
+	isAssessing.value = true
+	if (!silentToast) {
+		uni.showToast({ title: '开始' + getBodyPartName(selectedPartId.value) + '评估', icon: 'none' })
+	}
+}
+
+function handleStartAssess() {
+	startSelectedPartAssess(false, false)
+}
+
+function moveToNextPartAndStart() {
+	if (!hasNextPart.value) {
+		stopForce(800, 200)
+		isAssessing.value = false
+		showCompleteModal.value = false
+		goToResultPage()
+		return
+	}
+	selectedPartId.value = nextPartId.value
+	isAssessing.value = false
+	resetAssessState()
+	startSelectedPartAssess(true, true)
+}
+
+function handleStartNext() {
+	showCompleteModal.value = false
+	moveToNextPartAndStart()
+}
+
+function handleCancelNext() {
+	showCompleteModal.value = false
+	clearFinishTimer()
+	stopForce(800, 200)
+	isAssessing.value = false
+	goToResultPage()
+}
+
+function handleTimeout() {
+	showCompleteModal.value = false
+	moveToNextPartAndStart()
+}
+
+function selectPart(partId: string) {
+	if (isAssessing.value) {
+		uni.showToast({ title: '评估进行中，暂不可切换部位', icon: 'none' })
+		return
+	}
+	selectedPartId.value = partId
+	resetAssessState()
+	uni.showToast({ title: '已选择' + getBodyPartName(partId), icon: 'none' })
+}
+
+function handleFrame(frame: SerialFrame) {
+	debugSetForce.value = frame.setForce
+	debugLeftCount.value = frame.left.count
+	debugRightCount.value = frame.right.count
+	if (!isAssessing.value) return
+
+	const currentDistanceMm = Math.max(Math.max(frame.left.distance, frame.right.distance), 0)
+	const currentCount = Math.max(Math.max(frame.left.count, frame.right.count), frame.sportCount)
+	if (lastCount < 0) {
+		lastCount = currentCount
+		currentPeakDistanceMm = 0
+		return
+	}
+	if (currentCount < lastCount) {
+		lastCount = currentCount
+		currentPeakDistanceMm = 0
+		return
+	}
+	currentPeakDistanceMm = Math.max(currentPeakDistanceMm, currentDistanceMm)
+	if (currentCount > lastCount) {
+		const increment = currentCount - lastCount
+		for (let i = 0; i < increment && completedRepCount < 6; i += 1) {
+			commitRepPeakDistance()
+		}
+		lastCount = currentCount
+	}
+}
+
+function handleStatus(status: RuntimeStatus) {
+	runtimeStatus.value = status
+}
+
+function handleThumbnailClick() {
+	uni.showToast({ title: '视频功能开发中', icon: 'none' })
+}
+
+function prepareLeavePage() {
+	clearFinishTimer()
+	showCompleteModal.value = false
+	stopForce(800, 200)
+	isAssessing.value = false
+	resetAssessState()
+}
+
+function goBack() {
+	prepareLeavePage()
+	uni.navigateBack()
+}
+
+onMounted(() => {
+	const systemInfo = uni.getSystemInfoSync()
+	statusBarHeight.value = systemInfo.statusBarHeight != null ? systemInfo.statusBarHeight : 0
+	runtimeStatus.value = getStatus()
+	onFrame(handleFrame)
+	onStatus(handleStatus)
+})
+
+onBeforeUnmount(() => {
+	offFrame(handleFrame)
+	offStatus(handleStatus)
+	prepareLeavePage()
+})
+</script>
+
+<style>
+.page { position: relative; width: 100%; height: 100%; overflow: hidden; background-color: #000000; }
+.background-image { position: absolute; left: 0; top: 0; z-index: 0; width: 100%; height: 100%; }
+.custom-nav { position: absolute; left: 0; right: 0; top: 0; z-index: 100; background-color: rgba(0,0,0,0.18); }
+.nav-content { position: relative; height: 88rpx; align-items: center; justify-content: center; }
+.back-btn { position: absolute; left: 30rpx; width: 60rpx; height: 60rpx; border-radius: 30rpx; background-color: rgba(66,66,66,0.8); align-items: center; justify-content: center; }
+.back-icon { width: 40rpx; height: 40rpx; }
+.nav-title { font-size: 32rpx; font-weight: 600; color: #ffffff; }
+.coach-dialog-section { position: absolute; left: 24rpx; z-index: 80; }
+.debug-panel { position: absolute; right: 24rpx; bottom: 250rpx; z-index: 90; padding: 10rpx 14rpx; border-radius: 12rpx; background-color: rgba(0,0,0,0.7); }
+.debug-title { margin-bottom: 6rpx; font-size: 18rpx; font-weight: 700; color: #00ff88; }
+.debug-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding-top: 3rpx; padding-bottom: 3rpx; }
+.debug-label { margin-right: 16rpx; font-size: 18rpx; color: rgba(255,255,255,0.65); }
+.debug-value { font-size: 18rpx; font-weight: 600; color: #00ff88; }
+.strength-bars-section { position: absolute; left: 80rpx; right: 80rpx; z-index: 80; display: flex; flex-direction: row; justify-content: space-between; }
+.thumbnail-section { position: absolute; left: 24rpx; bottom: 250rpx; z-index: 80; }
+.thumbnail-container { position: relative; width: 280rpx; height: 180rpx; overflow: hidden; border-radius: 16rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.15); }
+.thumbnail-content { width: 100%; height: 100%; }
+.play-icon-img { position: absolute; right: 12rpx; bottom: 12rpx; width: 48rpx; height: 48rpx; }
+.start-btn-section { position: absolute; left: 0; right: 0; bottom: 140rpx; z-index: 86; padding-left: 24rpx; padding-right: 24rpx; align-items: center; }
+.start-assess-btn { width: 400rpx; height: 88rpx; line-height: 88rpx; border-radius: 44rpx; background-color: #00c853; color: #ffffff; font-size: 32rpx; font-weight: 700; }
+.start-assess-btn.disabled { background-color: #9e9e9e; }
+.body-parts-section { position: absolute; left: 0; right: 0; bottom: 0; z-index: 85; display: flex; flex-direction: row; align-items: stretch; padding: 16rpx; background-color: rgba(255,255,255,0.95); box-shadow: 0 -2rpx 10rpx rgba(0,0,0,0.1); }
+.parts-main-btn { width: 90rpx; height: 90rpx; margin-right: 12rpx; border-radius: 16rpx; background-color: #00c853; align-items: center; justify-content: center; }
+.parts-main-text { font-size: 28rpx; line-height: 32rpx; font-weight: 700; color: #ffffff; }
+.parts-scroll { flex: 1; white-space: nowrap; }
+.parts-list { display: flex; flex-direction: row; }
+.part-item { width: 90rpx; height: 90rpx; margin-right: 12rpx; border-radius: 16rpx; background-color: #f0f0f0; align-items: center; justify-content: center; }
+.part-item.active { background-color: #00c853; }
+.part-icon { width: 48rpx; height: 48rpx; margin-bottom: 6rpx; }
+.part-name { font-size: 22rpx; color: #333333; }
+.part-item.active .part-name { color: #ffffff; font-weight: 700; }
+</style>

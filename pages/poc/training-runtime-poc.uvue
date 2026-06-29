@@ -187,11 +187,13 @@ const caloriesText = computed(() => `${(calories.value / 1000).toFixed(2)}kcal`)
 const setForceText = computed(() => `${setForce.value}kg / mode ${setForceMode.value}`)
 const leftPortText = computed(() => {
 	const side = status.value.sides.left
-	return (side.connected ? 'ON ' : 'OFF ') + MOTOR_SERIAL_PORTS.left.path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+	const path = side.path.length > 0 ? side.path : MOTOR_SERIAL_PORTS.left.path
+	return (side.connected ? 'ON ' : 'OFF ') + path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
 })
 const rightPortText = computed(() => {
 	const side = status.value.sides.right
-	return (side.connected ? 'ON ' : 'OFF ') + MOTOR_SERIAL_PORTS.right.path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+	const path = side.path.length > 0 ? side.path : MOTOR_SERIAL_PORTS.right.path
+	return (side.connected ? 'ON ' : 'OFF ') + path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
 })
 
 function readInputValue(event: UniInputEvent): string {

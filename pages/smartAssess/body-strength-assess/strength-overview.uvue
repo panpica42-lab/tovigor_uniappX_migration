@@ -1,0 +1,130 @@
+<template>
+	<view class="page">
+		<view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
+			<view class="nav-content">
+				<CommonBackButton />
+				<text class="nav-title">力量评估</text>
+				<view class="nav-placeholder"></view>
+			</view>
+		</view>
+
+		<view class="content">
+			<view class="body-model-area">
+				<image class="body-image" src="/static/icons/smartAssessActivity/li-liang/bg_body.png" mode="aspectFit" />
+
+				<view class="cards-left">
+					<BodyPartCard name="背部" :weight="backDisplay.weight" :subItems="backDisplay.subItems" position="left" />
+					<BodyPartCard name="手臂" :weight="armDisplay.weight" :subItems="armDisplay.subItems" position="left" />
+					<BodyPartCard name="腿部" :weight="legDisplay.weight" :subItems="legDisplay.subItems" position="left" />
+				</view>
+
+				<view class="cards-right">
+					<BodyPartCard name="肩部" :weight="shoulderDisplay.weight" :subItems="shoulderDisplay.subItems" position="right" />
+					<BodyPartCard name="胸部" :weight="chestDisplay.weight" :subItems="chestDisplay.subItems" position="right" />
+					<BodyPartCard name="臀部" :weight="hipDisplay.weight" :subItems="hipDisplay.subItems" position="right" />
+				</view>
+			</view>
+
+			<view class="bottom-area">
+				<view class="tip-text">
+					<text class="tip-line">下面将进行一个短暂的部位力量评估</text>
+					<text class="tip-line">帮助获取合适的健身重量数据</text>
+				</view>
+				<button class="start-btn" @click="handleStartAssess">快速开始</button>
+				<view class="result-link" @click="goToResult">
+					<text class="result-link-text">查看已有结果</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import BodyPartCard from './components/body-part-card.uvue'
+import { StrengthDisplaySubItem, StrengthPartResult, getStoredStrengthResults } from './strength-assess-config.uts'
+
+type DisplayPart = {
+	weight: number
+	subItems: StrengthDisplaySubItem[]
+}
+
+const statusBarHeight = ref(0)
+const results = ref<StrengthPartResult[]>(getStoredStrengthResults())
+
+function createDisplayPart(result: StrengthPartResult | null): DisplayPart {
+	if (result == null) {
+		return {
+			weight: 0,
+			subItems: [
+				{ label: '热身', value: 0 },
+				{ label: '训练', value: 0 },
+				{ label: '冲刺', value: 0 }
+			]
+		}
+	}
+	return {
+		weight: result.trainingValue,
+		subItems: [
+			{ label: '热身', value: result.warmupValue },
+			{ label: '训练', value: result.trainingValue },
+			{ label: '冲刺', value: result.sprintValue }
+		]
+	}
+}
+
+function findResult(partId: string): StrengthPartResult | null {
+	for (let i = 0; i < results.value.length; i += 1) {
+		if (results.value[i].partId == partId) return results.value[i]
+	}
+	return null
+}
+
+const shoulderDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('shoulder')))
+const chestDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('chest')))
+const backDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('back')))
+const armDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('arm')))
+const hipDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('hip')))
+const legDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('leg')))
+
+function refreshResults() {
+	results.value = getStoredStrengthResults()
+}
+
+function handleStartAssess() {
+	uni.navigateTo({ url: '/pages/smartAssess/body-strength-assess/strength-assess' })
+}
+
+function goToResult() {
+	uni.navigateTo({ url: '/pages/smartAssess/body-strength-assess/strength-result' })
+}
+
+onMounted(() => {
+	const systemInfo = uni.getSystemInfoSync()
+	statusBarHeight.value = systemInfo.statusBarHeight != null ? systemInfo.statusBarHeight : 0
+	refreshResults()
+})
+
+onShow(() => {
+	refreshResults()
+})
+</script>
+
+<style>
+.page { display: flex; flex-direction: column; height: 100%; background-color: #e8e8e8; }
+.nav-bar { flex-shrink: 0; background-color: #e8e8e8; }
+.nav-content { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 88rpx; padding-left: 30rpx; padding-right: 30rpx; }
+.nav-title { font-size: 36rpx; font-weight: 600; color: #333333; }
+.nav-placeholder { width: 70rpx; }
+.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.body-model-area { position: relative; flex: 1; align-items: center; justify-content: center; }
+.body-image { width: 500rpx; height: 900rpx; }
+.cards-left { position: absolute; left: 10rpx; top: 0; bottom: 0; justify-content: space-around; padding-top: 100rpx; padding-bottom: 60rpx; }
+.cards-right { position: absolute; right: 10rpx; top: 0; bottom: 0; justify-content: space-around; padding-top: 40rpx; padding-bottom: 120rpx; }
+.bottom-area { flex-shrink: 0; align-items: center; padding: 30rpx 40rpx 42rpx; }
+.tip-text { align-items: center; margin-bottom: 24rpx; }
+.tip-line { font-size: 26rpx; line-height: 40rpx; color: #666666; }
+.start-btn { width: 400rpx; height: 88rpx; line-height: 88rpx; border-radius: 44rpx; background-color: #4caf50; color: #ffffff; font-size: 32rpx; font-weight: 600; }
+.result-link { margin-top: 18rpx; padding: 10rpx 30rpx; }
+.result-link-text { font-size: 24rpx; color: #666666; }
+</style>

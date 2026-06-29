@@ -1,0 +1,101 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<CommonBackButton class="back-btn-position" />
+			<text class="header-title">体态姿势</text>
+		</view>
+
+		<view class="progress-section">
+			<StepBar :totalSteps="totalSteps" :currentStep="currentStep" />
+		</view>
+
+		<view class="content">
+			<view class="assess-card">
+				<text class="assess-title">{{ currentPhase.title }}</text>
+				<CoachBoxEntry
+					class="coach-tip"
+					:text="currentPhase.tip"
+					bubbleWidth="620rpx"
+					contentBackground="rgba(255,255,255,0.9)"
+					:clickable="true"
+				/>
+				<view class="posture-image-wrapper">
+					<image class="posture-image" :src="currentPhase.image" mode="aspectFit" />
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import StepBar from '@/components/ui-box/step-bar.uvue'
+import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+
+type PosturePhase = {
+	title: string
+	tip: string
+	image: string
+}
+
+const phases: PosturePhase[] = [
+	{ title: '正面评估', tip: '面向镜头，平视前方，身体站直，双臂自然下垂', image: '/static/icons/smartAssessActivity/ti-tai/human_silhouette-front.png' },
+	{ title: '左侧评估', tip: '向左转，平视前方，身体站直，双臂自然下垂', image: '/static/icons/smartAssessActivity/ti-tai/human_silhouette-left.png' },
+	{ title: '右侧评估', tip: '向右转，平视前方，身体站直，双臂自然下垂', image: '/static/icons/smartAssessActivity/ti-tai/human_silhouette-right.png' },
+	{ title: '背面评估', tip: '转身背对镜头，身体站直，双臂自然下垂', image: '/static/icons/smartAssessActivity/ti-tai/human_silhouette-front.png' }
+]
+
+const totalSteps = ref(12)
+const currentStep = ref(0)
+const stepsPerPhase = 3
+const stepIntervalMs = 5000
+let stepTimer = 0
+
+const currentPhase = computed<PosturePhase>(() => {
+	const index = Math.min(Math.floor(currentStep.value / stepsPerPhase), phases.length - 1)
+	return phases[index]
+})
+
+function stopAssessment() {
+	if (stepTimer > 0) {
+		clearInterval(stepTimer)
+		stepTimer = 0
+	}
+}
+
+function startAssessment() {
+	stopAssessment()
+	currentStep.value = 0
+	stepTimer = setInterval(() => {
+		if (currentStep.value < totalSteps.value) {
+			currentStep.value += 1
+			return
+		}
+		stopAssessment()
+		uni.showToast({ title: '体态评估完成', icon: 'success' })
+	}, stepIntervalMs)
+}
+
+onMounted(() => {
+	startAssessment()
+})
+
+onBeforeUnmount(() => {
+	stopAssessment()
+})
+</script>
+
+<style>
+.container { display: flex; flex-direction: column; height: 100%; background-color: #f5f5f5; }
+.header { position: relative; height: 96rpx; align-items: center; justify-content: center; flex-shrink: 0; }
+.back-btn-position { position: absolute; left: 21rpx; top: 13rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.progress-section { padding-top: 10rpx; padding-bottom: 20rpx; flex-shrink: 0; }
+.content { flex: 1; padding: 6rpx 30rpx 20rpx; overflow: hidden; }
+.assess-card { flex: 1; padding: 24rpx 24rpx 30rpx; overflow: hidden; border-radius: 24rpx; background-color: #ffffff; box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.06); }
+.assess-title { margin-bottom: 10rpx; font-size: 32rpx; font-weight: 700; color: #333333; text-align: center; }
+.coach-tip { margin-bottom: 16rpx; }
+.posture-image-wrapper { flex: 1; width: 100%; align-items: center; justify-content: center; }
+.posture-image { width: 500rpx; height: 600rpx; }
+</style>
+

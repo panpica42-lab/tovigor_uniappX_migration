@@ -1,0 +1,57 @@
+<template>
+	<view class="part-card" :class="cardClass">
+		<view class="main-row">
+			<text class="part-name">{{ name }}</text>
+			<text class="part-weight">{{ displayWeight }}KG</text>
+		</view>
+		<view class="sub-items">
+			<view v-for="item in subItems" :key="item.label" class="sub-item">
+				<text class="sub-label">{{ item.label }}</text>
+				<text class="sub-value">{{ formatSubValue(item.value) }}</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { StrengthDisplaySubItem } from '../strength-assess-config.uts'
+
+const props = defineProps<{
+	name: string
+	weight: number
+	subItems: StrengthDisplaySubItem[]
+	position: string
+	highlighted?: boolean
+}>()
+
+function formatTwoDigits(value: number): string {
+	const safeValue = Math.max(0, Math.round(value))
+	if (safeValue < 10) return '0' + safeValue.toString()
+	return safeValue.toString()
+}
+
+function formatSubValue(value: number): string {
+	return formatTwoDigits(value) + 'KG'
+}
+
+const cardClass = computed<string>(() => {
+	let result = 'position-' + props.position
+	if (props.highlighted == true) result += ' part-card-highlighted'
+	return result
+})
+const displayWeight = computed<string>(() => formatTwoDigits(props.weight))
+</script>
+
+<style>
+.part-card { display: flex; flex-direction: column; min-width: 184rpx; padding: 10rpx 14rpx; border-radius: 16rpx; border-width: 2rpx; border-style: solid; border-color: rgba(255,255,255,0.8); background-color: rgba(255,255,255,0.95); box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.12); transform: scale(0.82); }
+.part-card-highlighted { background-color: #f7ffe7; border-color: rgba(154,203,38,0.65); }
+.position-left { align-items: flex-start; transform-origin: left center; }
+.position-right { align-items: flex-end; transform-origin: right center; }
+.main-row { display: flex; flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; margin-bottom: 8rpx; }
+.part-name { font-size: 24rpx; font-weight: 600; color: #333333; }
+.part-weight { font-size: 26rpx; font-weight: 700; color: #4caf50; }
+.sub-items { display: flex; flex-direction: row; }
+.sub-item { display: flex; flex-direction: column; align-items: center; margin-right: 8rpx; padding: 6rpx 8rpx; border-radius: 10rpx; background-color: #f0f0f0; }
+.sub-label { font-size: 16rpx; color: #7d7d7d; }
+.sub-value { font-size: 16rpx; font-weight: 600; color: #444444; }
+</style>

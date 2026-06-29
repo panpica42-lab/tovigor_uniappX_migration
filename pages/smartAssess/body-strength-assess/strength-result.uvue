@@ -1,0 +1,180 @@
+<template>
+	<view class="page">
+		<view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
+			<view class="nav-content">
+				<CommonBackButton />
+				<text class="nav-title">力量评估</text>
+				<view class="nav-placeholder"></view>
+			</view>
+		</view>
+
+		<view class="screen-content">
+			<view class="overview-card">
+				<view class="body-model-area">
+					<image class="body-image" src="/static/icons/smartAssessActivity/li-liang/bg_body.png" mode="aspectFit" />
+					<view class="cards-left">
+						<BodyPartCard name="背部" :weight="backDisplay.weight" :subItems="backDisplay.subItems" position="left" :highlighted="backDisplay.weight > 0" />
+						<BodyPartCard name="手臂" :weight="armDisplay.weight" :subItems="armDisplay.subItems" position="left" :highlighted="armDisplay.weight > 0" />
+						<BodyPartCard name="腿部" :weight="legDisplay.weight" :subItems="legDisplay.subItems" position="left" :highlighted="legDisplay.weight > 0" />
+					</view>
+					<view class="cards-right">
+						<BodyPartCard name="肩部" :weight="shoulderDisplay.weight" :subItems="shoulderDisplay.subItems" position="right" :highlighted="shoulderDisplay.weight > 0" />
+						<BodyPartCard name="胸部" :weight="chestDisplay.weight" :subItems="chestDisplay.subItems" position="right" :highlighted="chestDisplay.weight > 0" />
+						<BodyPartCard name="臀部" :weight="hipDisplay.weight" :subItems="hipDisplay.subItems" position="right" :highlighted="hipDisplay.weight > 0" />
+					</view>
+				</view>
+
+				<view class="summary-tip">
+					<text class="summary-title">{{ completedCount >= 6 ? '评估完成' : '评估结果' }}</text>
+					<text class="summary-desc">已根据峰值行程生成热身、训练、冲刺推荐值</text>
+				</view>
+
+				<button class="plan-btn" @click="handlePlanPress">制定训练计划</button>
+			</view>
+
+			<view class="recommend-section">
+				<view class="section-header">
+					<text class="section-title">课程推荐</text>
+					<view class="more-link" @click="handleMoreCourses">
+						<text class="more-text">更多 &gt;&gt;</text>
+					</view>
+				</view>
+
+				<scroll-view class="course-scroll" scroll-y="true" :show-scrollbar="false">
+					<view class="course-list">
+						<view v-for="course in visibleCourses" :key="course.id" class="course-card" @click="handleCourseClick(course.id)">
+							<image class="course-image" :src="course.cover" mode="aspectFill" />
+							<view class="course-overlay">
+								<view class="course-tag">
+									<text class="course-tag-text">{{ getCourseTag(course.tags) }}</text>
+								</view>
+								<text class="course-title">{{ course.title }}</text>
+							</view>
+						</view>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import BodyPartCard from './components/body-part-card.uvue'
+import { partTrainingCourses, PartTrainingCourse } from '@/pages/partTraining/course-data.uts'
+import { StrengthDisplaySubItem, StrengthPartResult, getStoredStrengthResults } from './strength-assess-config.uts'
+
+type DisplayPart = {
+	weight: number
+	subItems: StrengthDisplaySubItem[]
+}
+
+const statusBarHeight = ref(0)
+const results = ref<StrengthPartResult[]>(getStoredStrengthResults())
+const visibleCourses = ref<PartTrainingCourse[]>(partTrainingCourses.slice(0, 8))
+
+function createDisplayPart(result: StrengthPartResult | null): DisplayPart {
+	if (result == null) {
+		return {
+			weight: 0,
+			subItems: [
+				{ label: '热身', value: 0 },
+				{ label: '训练', value: 0 },
+				{ label: '冲刺', value: 0 }
+			]
+		}
+	}
+	return {
+		weight: result.trainingValue,
+		subItems: [
+			{ label: '热身', value: result.warmupValue },
+			{ label: '训练', value: result.trainingValue },
+			{ label: '冲刺', value: result.sprintValue }
+		]
+	}
+}
+
+function findResult(partId: string): StrengthPartResult | null {
+	for (let i = 0; i < results.value.length; i += 1) {
+		if (results.value[i].partId == partId) return results.value[i]
+	}
+	return null
+}
+
+const completedCount = computed<number>(() => {
+	let count = 0
+	for (let i = 0; i < results.value.length; i += 1) {
+		if (results.value[i].finished) count += 1
+	}
+	return count
+})
+const shoulderDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('shoulder')))
+const chestDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('chest')))
+const backDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('back')))
+const armDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('arm')))
+const hipDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('hip')))
+const legDisplay = computed<DisplayPart>(() => createDisplayPart(findResult('leg')))
+
+function refreshResults() {
+	results.value = getStoredStrengthResults()
+}
+
+function getCourseTag(tags: string[]): string {
+	if (tags.length > 0) return tags[0]
+	return '精选课程'
+}
+
+function handlePlanPress() {
+	uni.showToast({ title: '训练计划生成中', icon: 'none' })
+}
+
+function handleMoreCourses() {
+	uni.showToast({ title: '更多课程开发中', icon: 'none' })
+}
+
+function handleCourseClick(courseId: number) {
+	uni.navigateTo({ url: '/pages/partTraining/course-detail-adapter?id=' + courseId.toString() })
+}
+
+onMounted(() => {
+	const systemInfo = uni.getSystemInfoSync()
+	statusBarHeight.value = systemInfo.statusBarHeight != null ? systemInfo.statusBarHeight : 0
+	refreshResults()
+})
+
+onShow(() => {
+	refreshResults()
+})
+</script>
+
+<style>
+.page { display: flex; flex-direction: column; height: 100%; overflow: hidden; background-color: #f2f2f2; }
+.nav-bar { flex-shrink: 0; }
+.nav-content { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 88rpx; padding-left: 24rpx; padding-right: 24rpx; }
+.nav-title { font-size: 40rpx; font-weight: 600; color: #111111; }
+.nav-placeholder { width: 70rpx; }
+.screen-content { flex: 1; display: flex; flex-direction: column; padding: 6rpx 14rpx 8rpx; overflow: hidden; }
+.overview-card { flex-shrink: 0; padding: 6rpx 0 8rpx; border-radius: 24rpx; background-color: #ffffff; box-shadow: 0 14rpx 36rpx rgba(0,0,0,0.08); }
+.body-model-area { position: relative; height: 492rpx; align-items: center; justify-content: center; }
+.body-image { width: 264rpx; height: 484rpx; }
+.cards-left, .cards-right { position: absolute; top: 0; bottom: 0; justify-content: space-around; }
+.cards-left { left: 0; padding-top: 28rpx; padding-bottom: 14rpx; }
+.cards-right { right: 0; padding-top: 12rpx; padding-bottom: 28rpx; }
+.summary-tip { align-items: center; padding-left: 34rpx; padding-right: 34rpx; }
+.summary-title { font-size: 24rpx; font-weight: 700; color: #1b1b1b; }
+.summary-desc { margin-top: 4rpx; font-size: 18rpx; line-height: 28rpx; color: #6d6d6d; text-align: center; }
+.plan-btn { width: 280rpx; height: 68rpx; line-height: 68rpx; margin-top: 8rpx; border-radius: 24rpx; background-color: #9dcb26; color: #ffffff; font-size: 28rpx; font-weight: 600; }
+.recommend-section { flex: 1; min-height: 0; padding: 0 2rpx; }
+.section-header { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-top: 10rpx; margin-bottom: 10rpx; }
+.section-title { padding: 10rpx 20rpx; border-radius: 16rpx; background-color: #111111; font-size: 24rpx; font-weight: 600; color: #ffffff; }
+.more-link { padding-right: 4rpx; }
+.more-text { font-size: 22rpx; color: #a3a3a3; }
+.course-scroll { flex: 1; min-height: 0; }
+.course-list { display: flex; flex-direction: row; flex-wrap: wrap; padding-right: 8rpx; padding-bottom: 8rpx; }
+.course-card { position: relative; width: 344rpx; height: 176rpx; margin-right: 14rpx; margin-bottom: 14rpx; overflow: hidden; border-radius: 22rpx; background-color: #dddddd; box-shadow: 0 10rpx 24rpx rgba(0,0,0,0.08); }
+.course-image { width: 100%; height: 100%; }
+.course-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 12rpx; background-color: rgba(0,0,0,0.46); }
+.course-tag { align-self: flex-start; padding: 4rpx 12rpx; border-radius: 999rpx; background-color: rgba(255,184,0,0.92); }
+.course-tag-text { font-size: 15rpx; font-weight: 600; color: #3b2a00; }
+.course-title { margin-top: 6rpx; font-size: 22rpx; font-weight: 600; color: #ffffff; }
+</style>

@@ -1,0 +1,70 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<CommonBackButton class="back-btn-position" />
+			<text class="header-title">智能评估</text>
+		</view>
+
+		<view class="ad-banner">
+			<image class="ad-image" src="/static/icons/smartAssessActivity/firstSkip/advertising_board.png" mode="aspectFill" />
+		</view>
+
+		<view class="assess-cards">
+			<view class="card" @click="goToFunctionAssess">
+				<image class="card-bg" src="/static/icons/smartAssessActivity/firstSkip/bg_jineng.svg" mode="aspectFill" />
+				<view class="card-content">
+					<text class="card-title">身体机能</text>
+					<text class="card-desc">请按照指示连接外部体脂秤进行评估</text>
+				</view>
+			</view>
+
+			<view class="card" @click="goToPostureAssess">
+				<image class="card-bg" src="/static/icons/smartAssessActivity/firstSkip/bg_zishi.svg" mode="aspectFill" />
+				<view class="card-content">
+					<text class="card-title">体态姿势</text>
+					<text class="card-desc">通过引导姿势流程进行体态姿势评估</text>
+				</view>
+			</view>
+
+			<view class="card" @click="goToStrengthAssess">
+				<image class="card-bg" src="/static/icons/smartAssessActivity/firstSkip/bg_liliang.svg" mode="aspectFill" />
+				<view class="card-content">
+					<text class="card-title">部位力量</text>
+					<text class="card-desc">完成六个部位的力量评估并生成训练建议</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+
+function goToFunctionAssess() {
+	uni.navigateTo({ url: '/pages/smartAssess/body-function-assess/body-function-assess' })
+}
+
+function goToPostureAssess() {
+	uni.navigateTo({ url: '/pages/smartAssess/body-posture-assess/body-posture-assess' })
+}
+
+function goToStrengthAssess() {
+	uni.navigateTo({ url: '/pages/smartAssess/body-strength-assess/strength-overview' })
+}
+</script>
+
+<style>
+.container { display: flex; flex-direction: column; height: 100%; overflow: hidden; background-color: #f5f5f5; }
+.header { position: relative; height: 96rpx; align-items: center; justify-content: center; flex-shrink: 0; }
+.back-btn-position { position: absolute; left: 21rpx; top: 13rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.ad-banner { height: 350rpx; margin-left: 30rpx; margin-right: 30rpx; overflow: hidden; border-radius: 24rpx; flex-shrink: 0; }
+.ad-image { width: 100%; height: 100%; }
+.assess-cards { flex: 1; display: flex; flex-direction: column; padding: 30rpx; }
+.card { position: relative; flex: 1; margin-bottom: 20rpx; overflow: hidden; border-radius: 24rpx; padding: 30rpx; box-shadow: 0 8rpx 20rpx rgba(0,0,0,0.08); }
+.card-bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.card-content { position: relative; z-index: 1; display: flex; flex-direction: column; }
+.card-title { margin-bottom: 12rpx; font-size: 36rpx; font-weight: 700; color: #000000; }
+.card-desc { width: 410rpx; font-size: 24rpx; line-height: 38rpx; color: #333333; }
+</style>
+

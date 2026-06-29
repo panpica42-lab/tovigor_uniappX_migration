@@ -1,0 +1,156 @@
+export type BodyPartMeta = {
+	id: string
+	name: string
+	icon: string
+	baseForce: number
+}
+
+export type StrengthPartResult = {
+	partId: string
+	peakDistanceCm: number
+	warmupValue: number
+	trainingValue: number
+	sprintValue: number
+	levelText: string
+	finished: boolean
+	repDistances: number[]
+}
+
+export type StrengthDisplaySubItem = {
+	label: string
+	value: number
+}
+
+export const STRENGTH_ASSESS_STORAGE_KEY = 'smartAssessStrengthOverview'
+
+export const bodyPartList: BodyPartMeta[] = [
+	{ id: 'shoulder', name: '肩部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_shoulder.svg', baseForce: 15 },
+	{ id: 'chest', name: '胸部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_chest.svg', baseForce: 20 },
+	{ id: 'back', name: '背部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_back.svg', baseForce: 25 },
+	{ id: 'arm', name: '手臂', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_arm.svg', baseForce: 15 },
+	{ id: 'hip', name: '臀部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_hip.svg', baseForce: 25 },
+	{ id: 'leg', name: '腿部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_leg.svg', baseForce: 25 }
+]
+
+const forceLevels: number[] = [8, 10, 12, 15, 20, 25, 30]
+
+function createEmptyResult(partId: string): StrengthPartResult {
+	return {
+		partId,
+		peakDistanceCm: 0,
+		warmupValue: 0,
+		trainingValue: 0,
+		sprintValue: 0,
+		levelText: '待评估',
+		finished: false,
+		repDistances: []
+	}
+}
+
+export function getDefaultStrengthResults(): StrengthPartResult[] {
+	const results: StrengthPartResult[] = []
+	for (let i = 0; i < bodyPartList.length; i += 1) {
+		results.push(createEmptyResult(bodyPartList[i].id))
+	}
+	return results
+}
+
+export function getBodyPartName(partId: string): string {
+	for (let i = 0; i < bodyPartList.length; i += 1) {
+		if (bodyPartList[i].id == partId) return bodyPartList[i].name
+	}
+	return '未知部位'
+}
+
+export function getBodyPartBaseForce(partId: string): number {
+	for (let i = 0; i < bodyPartList.length; i += 1) {
+		if (bodyPartList[i].id == partId) return bodyPartList[i].baseForce
+	}
+	return 0
+}
+
+export function getPartIndex(partId: string): number {
+	for (let i = 0; i < bodyPartList.length; i += 1) {
+		if (bodyPartList[i].id == partId) return i
+	}
+	return -1
+}
+
+function snapToNearestForceLevel(value: number): number {
+	if (value <= 0) return 0
+	let nearest = forceLevels[0]
+	for (let i = 1; i < forceLevels.length; i += 1) {
+		if (Math.abs(forceLevels[i] - value) < Math.abs(nearest - value)) nearest = forceLevels[i]
+	}
+	return nearest
+}
+
+function getMultipliers(peakDistanceCm: number): number[] {
+	if (peakDistanceCm >= 80) return [1.3, 1.6]
+	if (peakDistanceCm >= 60) return [1.0, 1.25]
+	if (peakDistanceCm >= 40) return [0.8, 1.0]
+	if (peakDistanceCm >= 20) return [0.6, 0.8]
+	return [0.4, 0.6]
+}
+
+function getLevelText(peakDistanceCm: number): string {
+	if (peakDistanceCm >= 80) return '完整完成'
+	if (peakDistanceCm >= 60) return '大部分完成'
+	if (peakDistanceCm >= 40) return '部分完成'
+	if (peakDistanceCm >= 20) return '明显吃力'
+	return '几乎无法完成'
+}
+
+export function buildStrengthResult(partId: string, peakDistanceCm: number, repDistances: number[]): StrengthPartResult {
+	const baseForce = getBodyPartBaseForce(partId)
+	const multipliers = getMultipliers(peakDistanceCm)
+	const trainingValue = snapToNearestForceLevel(baseForce * multipliers[0])
+	const copiedDistances: number[] = []
+	for (let i = 0; i < repDistances.length; i += 1) {
+		copiedDistances.push(Math.max(0, Math.round(repDistances[i])))
+	}
+	return {
+		partId,
+		peakDistanceCm: Math.max(0, Math.round(peakDistanceCm)),
+		warmupValue: snapToNearestForceLevel(trainingValue * 0.8),
+		trainingValue,
+		sprintValue: snapToNearestForceLevel(baseForce * multipliers[1]),
+		levelText: getLevelText(peakDistanceCm),
+		finished: true,
+		repDistances: copiedDistances
+	}
+}
+
+export function mergeStrengthResult(results: StrengthPartResult[], nextResult: StrengthPartResult): StrengthPartResult[] {
+	const merged = getDefaultStrengthResults()
+	for (let i = 0; i < merged.length; i += 1) {
+		for (let j = 0; j < results.length; j += 1) {
+			if (merged[i].partId == results[j].partId) merged[i] = results[j]
+		}
+		if (merged[i].partId == nextResult.partId) merged[i] = nextResult
+	}
+	return merged
+}
+
+export function getStoredStrengthResults(): StrengthPartResult[] {
+	const storedText = `${uni.getStorageSync(STRENGTH_ASSESS_STORAGE_KEY)}`
+	if (storedText.length > 0 && storedText != 'null' && storedText != 'undefined') {
+		const results = getDefaultStrengthResults()
+		try {
+			const storedList = JSON.parse(storedText) as StrengthPartResult[]
+			for (let i = 0; i < results.length; i += 1) {
+				for (let j = 0; j < storedList.length; j += 1) {
+					if (results[i].partId == storedList[j].partId) results[i] = storedList[j]
+				}
+			}
+			return results
+		} catch (error) {
+			console.log('[StrengthAssess] parse stored result failed')
+		}
+	}
+	return getDefaultStrengthResults()
+}
+
+export function saveStrengthResults(results: StrengthPartResult[]) {
+	uni.setStorageSync(STRENGTH_ASSESS_STORAGE_KEY, JSON.stringify(results))
+}

@@ -1,0 +1,40 @@
+<template>
+	<view class="container">
+		<view class="header">
+			<CommonBackButton class="back-btn-position" />
+			<text class="header-title">身体机能</text>
+		</view>
+
+		<view class="content">
+			<CoachBoxEntry
+				class="coach-tip"
+				text="请按照指示连接外部体脂秤进行评估"
+				bubbleWidth="620rpx"
+				contentBackground="rgba(255,255,255,0.9)"
+				:clickable="true"
+			/>
+			<view class="device-image-wrapper">
+				<image class="device-image" src="/static/icons/smartAssessActivity/ji-neng/ic_body_fat_scale.png" mode="aspectFit" />
+				<text class="device-tip">体脂秤协议尚未接入，当前保留旧版引导占位能力</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+</script>
+
+<style>
+.container { display: flex; flex-direction: column; height: 100%; background-color: #f5f5f5; }
+.header { position: relative; height: 96rpx; align-items: center; justify-content: center; flex-shrink: 0; }
+.back-btn-position { position: absolute; left: 21rpx; top: 13rpx; }
+.header-title { font-size: 34rpx; font-weight: 700; color: #333333; }
+.content { flex: 1; padding: 40rpx 30rpx; align-items: center; }
+.coach-tip { margin-bottom: 40rpx; }
+.device-image-wrapper { flex: 1; width: 100%; padding: 40rpx; border-radius: 24rpx; background-color: #ffffff; align-items: center; justify-content: center; }
+.device-image { width: 500rpx; height: 500rpx; }
+.device-tip { margin-top: 26rpx; font-size: 24rpx; color: #777777; text-align: center; }
+</style>
+

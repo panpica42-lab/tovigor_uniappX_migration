@@ -1,17 +1,17 @@
 <script setup lang="uts">
 	import { connectSerial, setSerialDebugMode } from '@/utils/serialRuntime.uts'
-	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_PORTS } from '@/utils/serialConfig.uts'
+	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_MODE, MOTOR_SERIAL_PORTS, MOTOR_SERIAL_PROFILE } from '@/utils/serialConfig.uts'
 
-	const DEBUG_MODE = true // true: 跳过串口连接，false: 启用串口连接
+	const DEBUG_MODE = false // true: 跳过串口连接，false: 启用串口连接
 
 	// #ifdef APP-ANDROID || APP-HARMONY
 	let firstBackTime = 0
 	// #endif
 
 	function initSerialConnection() {
-		console.log('[App] init serial connection leftPath=' + MOTOR_SERIAL_PORTS.left.path + ' rightPath=' + MOTOR_SERIAL_PORTS.right.path + ' legacyPath=' + MOTOR_SERIAL_PATH + ' baudRate=' + MOTOR_BAUD_RATE.toString())
+		console.log('[App] init serial connection profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' primaryPath=' + MOTOR_SERIAL_PATH + ' leftPath=' + MOTOR_SERIAL_PORTS.left.path + ' rightPath=' + MOTOR_SERIAL_PORTS.right.path + ' baudRate=' + MOTOR_BAUD_RATE.toString())
 		connectSerial(MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, () => {
-			console.log('[App] serial connected, dual motor runtime ready')
+			console.log('[App] serial connected, motor runtime ready profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' primaryPath=' + MOTOR_SERIAL_PATH)
 		}, (message: string) => {
 			console.log('[App] serial connect failed: ' + message)
 			uni.showToast({

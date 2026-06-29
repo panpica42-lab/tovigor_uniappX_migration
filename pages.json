@@ -120,6 +120,54 @@
 				"navigationStyle": "custom",
 				"disableScroll": true
 			}
+		},
+		{
+			"path": "pages/smartAssess/first-skip",
+			"style": {
+				"navigationBarTitleText": "智能评估",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-function-assess/body-function-assess",
+			"style": {
+				"navigationBarTitleText": "身体机能",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-posture-assess/body-posture-assess",
+			"style": {
+				"navigationBarTitleText": "体态姿势",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-strength-assess/strength-overview",
+			"style": {
+				"navigationBarTitleText": "力量评估",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-strength-assess/strength-assess",
+			"style": {
+				"navigationBarTitleText": "力量评估",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-strength-assess/strength-result",
+			"style": {
+				"navigationBarTitleText": "力量评估结果",
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
 		}
 	],
 	"globalStyle": {

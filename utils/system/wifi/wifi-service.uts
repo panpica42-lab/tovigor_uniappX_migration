@@ -22,6 +22,7 @@ export type WifiItem = {
 	ssid: string
 	bssid: string
 	secure: boolean
+	securityType: string
 	signalStrength: number
 }
 
@@ -35,6 +36,7 @@ export type WifiConnectOptions = {
 	bssid: string
 	password: string
 	secure: boolean
+	securityType: string
 }
 
 export type WifiConnectResult = {
@@ -69,6 +71,7 @@ function normalizeWifiItem(item: UniWifiInfo): WifiItem {
 		ssid: item.SSID,
 		bssid: item.BSSID == null ? '' : item.BSSID,
 		secure: item.secure == null ? false : item.secure,
+		securityType: 'UNKNOWN',
 		signalStrength: item.signalStrength == null ? 0 : item.signalStrength
 	}
 }
@@ -78,6 +81,7 @@ function normalizeAndroidWifiItem(item: AndroidUniWifiInfo): WifiItem {
 		ssid: item.SSID,
 		bssid: item.BSSID == null ? '' : item.BSSID,
 		secure: item.secure,
+		securityType: item.securityType,
 		signalStrength: item.signalStrength
 	}
 }
@@ -125,6 +129,7 @@ function getWifiErrorText(error: any | null): string {
 	if (text.includes('errCode=12002') || text.includes('password error')) return 'WiFi 密码错误或连接失败'
 	if (text.includes('errCode=12005') || text.includes('wifi not turned on')) return '系统 WiFi 未开启，请先在设备设置中打开'
 	if (text.includes('errCode=12007') || text.includes('user denied')) return 'WiFi 连接被系统拒绝'
+	if (text.includes('errCode=12010') || text.includes('unknown error')) return 'App 内连接 WiFi 失败，请确认密码正确、网络信号可用，并优先用普通 WPA/WPA2 网络测试'
 	if (text.includes('errCode=12013') || text.includes('wifi config may be expired')) return '系统保存的 WiFi 配置已过期，请忘记该网络后重试'
 	if (text == 'Error') return ''
 	if (text == '[object Object]') return ''
@@ -224,7 +229,7 @@ export function getConnectedWifi(): Promise<WifiItem> {
 			success: (res: UniWifiResult) => {
 				const wifi = res.wifi
 				if (wifi == null) {
-					resolve({ ssid: '', bssid: '', secure: false, signalStrength: 0 })
+					resolve({ ssid: '', bssid: '', secure: false, securityType: 'NONE', signalStrength: 0 })
 					return
 				}
 				resolve(normalizeWifiItem(wifi))
@@ -273,6 +278,9 @@ export function scanWifiList(): Promise<void> {
 
 export async function connectWifiNetwork(options: WifiConnectOptions): Promise<WifiConnectResult> {
 	const trimmedPassword = options.password.trim()
+	if (options.securityType == 'EAP') {
+		throw new Error('该网络是企业/校园网 EAP，需要账号、密码和证书等配置，当前不支持用单个密码在 App 内直连')
+	}
 	if (options.secure && trimmedPassword.length == 0) {
 		throw new Error('请输入 WiFi 密码')
 	}

@@ -1,0 +1,59 @@
+<template>
+	<view class="strength-bar-card">
+		<text class="card-label">{{ label }}</text>
+		<view class="bars-container">
+			<view class="bar-wrapper">
+				<view class="bar-slot">
+					<view class="bar-fill" :class="{ active: firstValue > 0 }" :style="{ height: getBarHeight(firstValue) }"></view>
+				</view>
+				<view v-if="firstValue > 0" class="value-tag" :style="{ bottom: getTagPosition(firstValue) }">
+					<text class="value-text">{{ firstValue }}{{ unit }}</text>
+				</view>
+			</view>
+			<view class="bar-wrapper">
+				<view class="bar-slot">
+					<view class="bar-fill" :class="{ active: secondValue > 0 }" :style="{ height: getBarHeight(secondValue) }"></view>
+				</view>
+				<view v-if="secondValue > 0" class="value-tag" :style="{ bottom: getTagPosition(secondValue) }">
+					<text class="value-text">{{ secondValue }}{{ unit }}</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const props = defineProps<{
+	label: string
+	firstValue: number
+	secondValue: number
+	maxValue: number
+	unit: string
+}>()
+
+function getPercent(value: number): number {
+	if (props.maxValue <= 0) return 0
+	return Math.min((value / props.maxValue) * 100, 100)
+}
+
+function getBarHeight(value: number): string {
+	return getPercent(value).toString() + '%'
+}
+
+function getTagPosition(value: number): string {
+	return getPercent(value).toString() + '%'
+}
+</script>
+
+<style>
+.strength-bar-card { display: flex; flex-direction: column; align-items: center; min-width: 140rpx; padding: 16rpx 12rpx 0; border-radius: 16rpx; background-color: rgba(255,255,255,0.9); }
+.card-label { margin-bottom: 8rpx; font-size: 22rpx; color: #666666; }
+.bars-container { display: flex; flex-direction: row; padding: 12rpx 12rpx 0; border-top-left-radius: 24rpx; border-top-right-radius: 24rpx; background-color: #e8e8e8; }
+.bar-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; margin-left: 6rpx; margin-right: 6rpx; }
+.bar-slot { position: relative; display: flex; flex-direction: column; justify-content: flex-end; width: 36rpx; height: 200rpx; overflow: hidden; background-color: #f5f5f5; }
+.bar-fill { width: 100%; background-color: #e0e0e0; }
+.bar-fill.active { background-color: #4caf50; }
+.value-tag { position: absolute; left: 50%; transform: translateX(-50%); z-index: 10; padding: 4rpx 10rpx; border-radius: 6rpx; background-color: #4caf50; }
+.value-text { font-size: 18rpx; font-weight: 500; color: #ffffff; }
+</style>
+
