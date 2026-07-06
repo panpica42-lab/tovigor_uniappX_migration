@@ -47,7 +47,7 @@ const displayWeight = computed<string>(() => formatTwoDigits(props.weight))
 .part-card-highlighted { background-color: #f7ffe7; border-color: rgba(154,203,38,0.65); }
 .position-left { align-items: flex-start; transform-origin: left center; }
 .position-right { align-items: flex-end; transform-origin: right center; }
-.main-row { display: flex; flex-direction: row; align-items: baseline; justify-content: space-between; width: 100%; margin-bottom: 8rpx; }
+.main-row { display: flex; flex-direction: row; align-items: flex-end; justify-content: space-between; width: 100%; margin-bottom: 8rpx; }
 .part-name { font-size: 24rpx; font-weight: 600; color: #333333; }
 .part-weight { font-size: 26rpx; font-weight: 700; color: #4caf50; }
 .sub-items { display: flex; flex-direction: row; }

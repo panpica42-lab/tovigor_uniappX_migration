@@ -137,10 +137,12 @@
 			</view>
 		</view>
 
+		<IdleOverlay v-if="showIdleOverlay" @wake="hideIdleOverlay" />
 	</view>
 </template>
 
 <script setup lang="uts">
+import IdleOverlay from '@/components/idle/IdleOverlay.uvue'
 import { partTrainingCourses, PartTrainingCourse } from '@/pages/partTraining/course-data.uts'
 import { getAllCoaches } from '@/utils/coachManager.uts'
 
@@ -174,6 +176,7 @@ function getInitialCourseScrollHeight(): number {
 
 const courseList = ref<PartTrainingCourse[]>(partTrainingCourses)
 const courseScrollHeight = ref(getInitialCourseScrollHeight())
+const showIdleOverlay = ref(true)
 const showGuideModal = ref(false)
 const showBrightnessModal = ref(false)
 const brightnessValue = ref(60)
@@ -191,6 +194,10 @@ const guideItems = ref<GuideItem[]>([
 	{ id: 2, title: '如何更换配件？ 演示视频', image: '/static/icons/homeActivity/ic_course_02.png', textLabel: '文字指导' }
 ])
 let partTrainingWarmupTimer = 0
+
+function hideIdleOverlay() {
+	showIdleOverlay.value = false
+}
 
 function showUsageGuide() {
 	showGuideModal.value = true
@@ -338,6 +345,7 @@ onUnmounted(() => {
 
 <style>
 .container {
+	position: relative;
 	background-color: #F5F5F5;
 	padding: 40rpx 30rpx;
 	height: 100%;

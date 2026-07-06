@@ -8,6 +8,15 @@
 			}
 		},
 		{
+			"path": "pages/idle/idle",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/system/wifi",
 			"style": {
 				"navigationBarTitleText": "",

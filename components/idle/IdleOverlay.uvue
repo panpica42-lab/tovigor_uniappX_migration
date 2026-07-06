@@ -1,0 +1,144 @@
+<template>
+	<view class="idle-overlay" @click="wake" @tap="wake">
+		<image
+			v-if="!showBackgroundVideo"
+			class="background-poster"
+			:src="backgroundPosterSrc"
+			mode="aspectFill"
+			@click="wake"
+			@tap="wake"
+		/>
+		<video
+			v-if="showBackgroundVideo"
+			id="idleBgVideo"
+			class="bg-video"
+			:src="backgroundVideoSrc"
+			:poster="backgroundPosterSrc"
+			autoplay
+			loop
+			muted
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-fullscreen-btn="false"
+			:show-progress="false"
+			:enable-progress-gesture="false"
+			:show-mute-btn="false"
+			:enable-play-gesture="false"
+			:vslide-gesture="false"
+			:show-casting-button="false"
+			object-fit="cover"
+			@loadedmetadata="handleVideoLoaded"
+			@ended="handleVideoEnded"
+			@error="handleVideoError"
+			@click="wake"
+			@tap="wake"
+		></video>
+
+		<view class="touch-mask" @click="wake" @tap="wake"></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+const emit = defineEmits(['wake'])
+
+const backgroundVideoSrc = '/static/icons/partTrainingActivity/startTraining/vedio-placeHolder.mp4'
+const backgroundPosterSrc = '/static/icons/partTrainingActivity/startTraining/vedio-placeHolder-poster.jpg'
+const showBackgroundVideo = ref(false)
+let videoContext: VideoContext | null = null
+let videoRetryTimer = 0
+let hasWoken = false
+
+function wake() {
+	if (hasWoken) return
+	hasWoken = true
+	emit('wake')
+}
+
+function playBackgroundVideo() {
+	if (videoContext == null) {
+		videoContext = uni.createVideoContext('idleBgVideo')
+	}
+	if (videoContext != null) {
+		videoContext!.play()
+	}
+}
+
+function handleVideoEnded() {
+	if (videoContext == null) {
+		videoContext = uni.createVideoContext('idleBgVideo')
+	}
+	if (videoContext != null) {
+		videoContext!.seek(0)
+		videoContext!.play()
+	}
+}
+
+function scheduleVideoPlay() {
+	if (videoRetryTimer != 0) {
+		clearTimeout(videoRetryTimer)
+	}
+	videoRetryTimer = setTimeout(() => {
+		videoRetryTimer = 0
+		showBackgroundVideo.value = true
+		setTimeout(() => {
+			playBackgroundVideo()
+		}, 120)
+	}, 300)
+}
+
+function handleVideoLoaded() {
+	playBackgroundVideo()
+}
+
+function handleVideoError(_event: UniVideoErrorEvent) {
+	showBackgroundVideo.value = false
+}
+
+onMounted(() => {
+	scheduleVideoPlay()
+})
+
+onBeforeUnmount(() => {
+	if (videoRetryTimer != 0) {
+		clearTimeout(videoRetryTimer)
+		videoRetryTimer = 0
+	}
+})
+</script>
+
+<style>
+.idle-overlay {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 750rpx;
+	height: 100%;
+	background-color: #000000;
+	overflow: hidden;
+	z-index: 1000;
+}
+
+.bg-video,
+.background-poster {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 750rpx;
+	height: 100%;
+	z-index: 0;
+}
+
+.touch-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 750rpx;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.01);
+	z-index: 1;
+}
+</style>
