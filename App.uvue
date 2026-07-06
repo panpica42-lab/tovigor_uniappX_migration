@@ -1,19 +1,19 @@
 <script setup lang="uts">
 	import { connectSerial, setSerialDebugMode } from '@/utils/serialRuntime.uts'
-	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_MODE, MOTOR_SERIAL_PORTS, MOTOR_SERIAL_PROFILE } from '@/utils/serialConfig.uts'
+	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE } from '@/utils/serialConfig.uts'
 
-	const DEBUG_MODE = false // true: 跳过串口连接，false: 启用串口连接
+	const DEBUG_MODE = true // true: 跳过串口连接，false: 不跳过串口连接
 
 	// #ifdef APP-ANDROID || APP-HARMONY
 	let firstBackTime = 0
 	// #endif
 
 	function initSerialConnection() {
-		console.log('[App] init serial connection profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' primaryPath=' + MOTOR_SERIAL_PATH + ' leftPath=' + MOTOR_SERIAL_PORTS.left.path + ' rightPath=' + MOTOR_SERIAL_PORTS.right.path + ' baudRate=' + MOTOR_BAUD_RATE.toString())
+		console.log('[App] 初始化串口连接 path=' + MOTOR_SERIAL_PATH + ' baudRate=' + MOTOR_BAUD_RATE.toString())
 		connectSerial(MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, () => {
-			console.log('[App] serial connected, motor runtime ready profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' primaryPath=' + MOTOR_SERIAL_PATH)
+			console.log('[App] 串口连接成功，下位机通信就绪 path=' + MOTOR_SERIAL_PATH)
 		}, (message: string) => {
-			console.log('[App] serial connect failed: ' + message)
+			console.log('[App] 串口连接失败: ' + message)
 			uni.showToast({
 				title: '设备连接失败',
 				icon: 'none',
@@ -24,13 +24,13 @@
 
 	onLaunch(() => {
 		console.log('App Launch')
-		console.log('[App] DEBUG_MODE=' + DEBUG_MODE.toString())
+		console.log('[App] DEBUG_MODE=' + DEBUG_MODE.toString() + '（true=跳过串口连接，false=不跳过串口连接）')
 		setSerialDebugMode(DEBUG_MODE)
 		if (DEBUG_MODE) {
-			console.log('[App] DEBUG_MODE=true, UI debug mode enabled, skip serial connection and report runtime connected=true')
+			console.log('[App] DEBUG_MODE=true，已进入UI调试模式，跳过串口连接并上报 connected=true')
 			return
 		}
-		console.log('[App] DEBUG_MODE=false, serial connection enabled')
+		console.log('[App] DEBUG_MODE=false，不跳过串口连接，开始连接真实设备')
 		initSerialConnection()
 	})
 

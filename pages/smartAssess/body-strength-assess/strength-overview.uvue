@@ -2,7 +2,7 @@
 	<view class="page">
 		<view class="nav-bar" :style="{ paddingTop: statusBarHeight + 'px' }">
 			<view class="nav-content">
-				<CommonBackButton />
+				<CommonBackButton :useDefault="false" @click="handleBack" />
 				<text class="nav-title">力量评估</text>
 				<view class="nav-placeholder"></view>
 			</view>
@@ -43,6 +43,7 @@
 import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
 import BodyPartCard from './components/body-part-card.uvue'
 import { StrengthDisplaySubItem, StrengthPartResult, getStoredStrengthResults } from './strength-assess-config.uts'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
 
 type DisplayPart = {
 	weight: number
@@ -51,6 +52,10 @@ type DisplayPart = {
 
 const statusBarHeight = ref(0)
 const results = ref<StrengthPartResult[]>(getStoredStrengthResults())
+
+function handleBack() {
+	navigateBackOrReLaunch('/pages/smartAssess/first-skip')
+}
 
 function createDisplayPart(result: StrengthPartResult | null): DisplayPart {
 	if (result == null) {

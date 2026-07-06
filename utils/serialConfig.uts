@@ -1,43 +1,34 @@
-export type MotorSerialSideConfig = {
+export type MotorSerialConfig = {
 	path: string
 	baudRate: number
 }
 
-export type MotorSerialPortsConfig = {
-	left: MotorSerialSideConfig
-	right: MotorSerialSideConfig
+export type SerialBoardConfig = {
+	motor: MotorSerialConfig
 }
 
-export type MotorSerialProfile = string
-export type MotorSerialMode = string
+export type SerialBoardKey = '3568' | '3576'
 
-export const MOTOR_BAUD_RATE = 115200
-export const MOTOR_SERIAL_PROFILE: MotorSerialProfile = 'bench' // sample: 双电机样机；bench: 单电机调试架
-
-const MOTOR_SAMPLE_SERIAL_PORTS: MotorSerialPortsConfig = {
-	left: {
-		path: '/dev/ttyS6',
-		baudRate: MOTOR_BAUD_RATE
-	},
-	right: {
-		path: '/dev/ttyS8',
-		baudRate: MOTOR_BAUD_RATE
+function createSerialBoardConfig(path: string, baudRate: number): SerialBoardConfig {
+	return {
+		motor: {
+			path,
+			baudRate
+		}
 	}
 }
 
-const MOTOR_BENCH_SERIAL_PORTS: MotorSerialPortsConfig = {
-	left: {
-		path: '/dev/ttyS9',
-		baudRate: MOTOR_BAUD_RATE
-	},
-	right: {
-		path: '',
-		baudRate: MOTOR_BAUD_RATE
+function getSerialBoardConfig(board: SerialBoardKey): SerialBoardConfig {
+	if (board == '3568') {
+		return createSerialBoardConfig('/dev/ttyS9', 115200)
 	}
+	return createSerialBoardConfig('/dev/ttyS8', 115200)
 }
 
-export const MOTOR_SERIAL_MODE: MotorSerialMode = MOTOR_SERIAL_PROFILE == 'bench' ? 'single' : 'dual'
-export const MOTOR_SERIAL_PORTS: MotorSerialPortsConfig = MOTOR_SERIAL_PROFILE == 'bench' ? MOTOR_BENCH_SERIAL_PORTS : MOTOR_SAMPLE_SERIAL_PORTS
+// 可选值：'3568' | '3576'
+export const ACTIVE_SERIAL_BOARD: SerialBoardKey = '3576'
 
-// Legacy primary path for older debug controls. The runtime selects enabled ports by profile.
-export const MOTOR_SERIAL_PATH = MOTOR_SERIAL_PORTS.left.path
+export const SERIAL_DEVICES: SerialBoardConfig = getSerialBoardConfig(ACTIVE_SERIAL_BOARD)
+
+export const MOTOR_SERIAL_PATH = SERIAL_DEVICES.motor.path
+export const MOTOR_BAUD_RATE = SERIAL_DEVICES.motor.baudRate

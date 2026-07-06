@@ -1,7 +1,7 @@
 <template>
 	<view class="container">
 		<view class="header">
-			<CommonBackButton class="back-btn-position" />
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 			<text class="header-title">智能评估</text>
 		</view>
 
@@ -39,6 +39,11 @@
 
 <script setup lang="uts">
 import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
+
+function handleBack() {
+	navigateBackOrReLaunch('/pages/index/index')
+}
 
 function goToFunctionAssess() {
 	uni.navigateTo({ url: '/pages/smartAssess/body-function-assess/body-function-assess' })
@@ -67,4 +72,3 @@ function goToStrengthAssess() {
 .card-title { margin-bottom: 12rpx; font-size: 36rpx; font-weight: 700; color: #000000; }
 .card-desc { width: 410rpx; font-size: 24rpx; line-height: 38rpx; color: #333333; }
 </style>
-

@@ -1,7 +1,7 @@
 <template>
 	<view class="container">
 		<view class="header">
-			<CommonBackButton class="back-btn-position" />
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 			<text class="header-title">体态姿势</text>
 		</view>
 
@@ -31,6 +31,7 @@
 import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
 import StepBar from '@/components/ui-box/step-bar.uvue'
 import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
 
 type PosturePhase = {
 	title: string
@@ -51,17 +52,22 @@ const stepsPerPhase = 3
 const stepIntervalMs = 5000
 let stepTimer = 0
 
-const currentPhase = computed<PosturePhase>(() => {
-	const index = Math.min(Math.floor(currentStep.value / stepsPerPhase), phases.length - 1)
-	return phases[index]
-})
-
 function stopAssessment() {
 	if (stepTimer > 0) {
 		clearInterval(stepTimer)
 		stepTimer = 0
 	}
 }
+
+function handleBack() {
+	stopAssessment()
+	navigateBackOrReLaunch('/pages/smartAssess/first-skip')
+}
+
+const currentPhase = computed<PosturePhase>(() => {
+	const index = Math.min(Math.floor(currentStep.value / stepsPerPhase), phases.length - 1)
+	return phases[index]
+})
 
 function startAssessment() {
 	stopAssessment()
@@ -98,4 +104,3 @@ onBeforeUnmount(() => {
 .posture-image-wrapper { flex: 1; width: 100%; align-items: center; justify-content: center; }
 .posture-image { width: 500rpx; height: 600rpx; }
 </style>
-

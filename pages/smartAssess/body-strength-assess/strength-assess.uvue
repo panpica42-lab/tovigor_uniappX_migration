@@ -96,6 +96,7 @@
 import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
 import AssessmentCompleteModal from '@/components/modals/assessment-complete-modal.uvue'
 import StrengthBarCard from './components/strength-bar-card.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
 import {
 	FORCE_MODE,
 	SerialFrame,
@@ -346,7 +347,7 @@ function prepareLeavePage() {
 
 function goBack() {
 	prepareLeavePage()
-	uni.navigateBack()
+	navigateBackOrReLaunch('/pages/smartAssess/body-strength-assess/strength-overview')
 }
 
 onMounted(() => {

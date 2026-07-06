@@ -6,7 +6,7 @@ import {
 	readSerialBridge,
 	writeSerialBridge
 } from '@/uni_modules/wzl-serialbridge'
-import { MOTOR_SERIAL_MODE, MOTOR_SERIAL_PATH, MOTOR_SERIAL_PORTS, MOTOR_SERIAL_PROFILE } from '@/utils/serialConfig.uts'
+import { MOTOR_BAUD_RATE, MOTOR_SERIAL_PATH } from '@/utils/serialConfig.uts'
 
 type ForceModeMap = {
 	OFF: number
@@ -54,23 +54,11 @@ export type SerialFrame = {
 	ts: number
 }
 
-export type RuntimeSideStatus = {
-	connected: boolean
-	portId: number
-	path: string
-	lastError: string
-	frameCount: number
-	rawCount: number
-}
-
-export type RuntimeSidesStatus = {
-	left: RuntimeSideStatus
-	right: RuntimeSideStatus
-}
-
 export type RuntimeStatus = {
+	portOpen: boolean
 	connected: boolean
 	connecting: boolean
+	probing: boolean
 	debugMode: boolean
 	working: boolean
 	portId: number
@@ -78,11 +66,9 @@ export type RuntimeStatus = {
 	lastError: string
 	frameCount: number
 	rawCount: number
-	sides: RuntimeSidesStatus
 }
 
-type MotorChannel = {
-	side: string
+type SerialChannel = {
 	portId: number
 	path: string
 	readTimer: number
@@ -108,51 +94,11 @@ const D180_CRC_OFFSET = 6
 const READ_INTERVAL = 100
 const READ_TIMEOUT = 30
 const READ_LENGTH = 96
+const PROBE_TIMEOUT = 1000
 
-function createEmptySide(): SerialSide {
-	return {
-		distance: 0,
-		speed: 0,
-		count: 0,
-		power: 0,
-		instantForce: 0
-	}
-}
-
-function createEmptyFrame(): SerialFrame {
-	return {
-		type: 'A9',
-		index: 0,
-		left: createEmptySide(),
-		right: createEmptySide(),
-		setForce: 0,
-		setForceMode: 0,
-		bothHandsPower: 0,
-		calories: 0,
-		sportTime: 0,
-		sportCount: 0,
-		busVoltage: 0,
-		sleepState: 0,
-		ts: 0
-	}
-}
-
-const leftChannel: MotorChannel = {
-	side: 'left',
+const serialChannel: SerialChannel = {
 	portId: 0,
-	path: MOTOR_SERIAL_PORTS.left.path,
-	readTimer: 0,
-	readLoopId: 0,
-	rxBuffer: '',
-	lastError: '',
-	frameCount: 0,
-	rawCount: 0
-}
-
-const rightChannel: MotorChannel = {
-	side: 'right',
-	portId: 0,
-	path: MOTOR_SERIAL_PORTS.right.path,
+	path: MOTOR_SERIAL_PATH,
 	readTimer: 0,
 	readLoopId: 0,
 	rxBuffer: '',
@@ -172,88 +118,37 @@ let isConnecting = false
 let serialDebugMode = false
 let manualReadLocks = 0
 let shutdownReadActive = false
-let hasLeftFrame = false
-let hasRightFrame = false
-let latestLeftFrame: SerialFrame = createEmptyFrame()
-let latestRightFrame: SerialFrame = createEmptyFrame()
+let deviceReady = false
+let isProbing = false
+let probeTimer = 0
 
 const frameListeners: FrameCallback[] = []
 const statusListeners: StatusCallback[] = []
 const connectSuccessListeners: (() => void)[] = []
 const connectFailListeners: ((message: string) => void)[] = []
 
-function isSingleMotorProfile(): boolean {
-	return MOTOR_SERIAL_MODE == 'single'
-}
-
-function getEnabledChannels(): MotorChannel[] {
-	if (isSingleMotorProfile()) {
-		return [leftChannel]
-	}
-	return [leftChannel, rightChannel]
-}
-
-function resetFrameCache() {
-	hasLeftFrame = false
-	hasRightFrame = false
-	latestLeftFrame = createEmptyFrame()
-	latestRightFrame = createEmptyFrame()
-}
-
-function isChannelConnected(channel: MotorChannel): boolean {
-	return channel.portId > 0
-}
-
 function isConnected(): boolean {
 	if (serialDebugMode) return true
-	const channels = getEnabledChannels()
-	let i = 0
-	while (i < channels.length) {
-		if (!isChannelConnected(channels[i])) return false
-		i += 1
-	}
-	return channels.length > 0
+	return deviceReady
 }
 
-function sideStatus(channel: MotorChannel): RuntimeSideStatus {
-	return {
-		connected: channel.portId > 0,
-		portId: channel.portId,
-		path: channel.path,
-		lastError: channel.lastError,
-		frameCount: channel.frameCount,
-		rawCount: channel.rawCount
-	}
-}
-
-function getLastError(): string {
-	if (isSingleMotorProfile()) {
-		if (leftChannel.lastError.length > 0) return 'bench: ' + leftChannel.lastError
-		return ''
-	}
-	if (leftChannel.lastError.length > 0 && rightChannel.lastError.length > 0) {
-		return 'left: ' + leftChannel.lastError + '; right: ' + rightChannel.lastError
-	}
-	if (leftChannel.lastError.length > 0) return 'left: ' + leftChannel.lastError
-	if (rightChannel.lastError.length > 0) return 'right: ' + rightChannel.lastError
-	return ''
+function isPortOpen(): boolean {
+	return serialChannel.portId > 0
 }
 
 function getStatusInternal(): RuntimeStatus {
 	return {
+		portOpen: isPortOpen(),
 		connected: isConnected(),
 		connecting: isConnecting,
+		probing: isProbing,
 		debugMode: serialDebugMode,
 		working: isWorking,
-		portId: leftChannel.portId,
-		path: MOTOR_SERIAL_PATH,
-		lastError: getLastError(),
-		frameCount: leftChannel.frameCount + rightChannel.frameCount,
-		rawCount: leftChannel.rawCount + rightChannel.rawCount,
-		sides: {
-			left: sideStatus(leftChannel),
-			right: sideStatus(rightChannel)
-		}
+		portId: serialChannel.portId,
+		path: serialChannel.path,
+		lastError: serialChannel.lastError,
+		frameCount: serialChannel.frameCount,
+		rawCount: serialChannel.rawCount
 	}
 }
 
@@ -302,15 +197,15 @@ export function getStatus(): RuntimeStatus {
 
 export function setSerialDebugMode(enabled: boolean) {
 	if (serialDebugMode == enabled) {
-		console.log('[serialRuntime] debug mode unchanged: ' + enabled.toString())
+		console.log('[serialRuntime] 调试模式未变化 DEBUG_MODE=' + enabled.toString())
 		return
 	}
 	serialDebugMode = enabled
-	console.log('[serialRuntime] debug mode set to ' + serialDebugMode.toString())
+	console.log('[serialRuntime] 调试模式已设置 DEBUG_MODE=' + serialDebugMode.toString() + '（true=跳过串口连接，false=不跳过串口连接）')
 	if (serialDebugMode) {
 		isConnecting = false
-		leftChannel.lastError = ''
-		rightChannel.lastError = ''
+		isProbing = false
+		serialChannel.lastError = ''
 	}
 	emitStatus()
 }
@@ -323,12 +218,7 @@ export function scanSerialDevices(success: (devices: string[]) => void, fail: (m
 	listDevicesBridge(['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA'], (devices) => {
 		success(devices)
 	}, (errMsg) => {
-		const channels = getEnabledChannels()
-		let i = 0
-		while (i < channels.length) {
-			channels[i].lastError = errMsg
-			i += 1
-		}
+		serialChannel.lastError = errMsg
 		fail(errMsg)
 		emitStatus()
 	})
@@ -350,83 +240,113 @@ function flushConnectFail(message: string) {
 	connectSuccessListeners.splice(0, connectSuccessListeners.length)
 }
 
-function resetChannelRuntime(channel: MotorChannel, path: string) {
-	channel.path = path
-	channel.lastError = ''
-	channel.rxBuffer = ''
-	channel.frameCount = 0
-	channel.rawCount = 0
+function resetChannelRuntime(path: string) {
+	serialChannel.path = path
+	serialChannel.lastError = ''
+	serialChannel.rxBuffer = ''
+	serialChannel.frameCount = 0
+	serialChannel.rawCount = 0
+	deviceReady = false
 }
 
-function openChannel(channel: MotorChannel, path: string, baudRate: number, success: () => void, fail: (message: string) => void) {
-	if (channel.portId > 0) {
+function openChannel(path: string, baudRate: number, success: () => void, fail: (message: string) => void) {
+	if (serialChannel.portId > 0) {
 		success()
 		return
 	}
-	resetChannelRuntime(channel, path)
+	resetChannelRuntime(path)
 	openSerialBridge(path, baudRate, (openedPortId) => {
-		channel.portId = openedPortId
-		channel.path = path
-		channel.lastError = ''
-		channel.rxBuffer = ''
-		console.log('[serialRuntime] motor serial connected side=' + channel.side + ' path=' + path + ' portId=' + openedPortId.toString())
+		serialChannel.portId = openedPortId
+		serialChannel.path = path
+		serialChannel.lastError = ''
+		serialChannel.rxBuffer = ''
+		console.log('[serialRuntime] 串口节点已打开 path=' + path + ' portId=' + openedPortId.toString())
 		success()
 	}, (errMsg) => {
-		channel.lastError = errMsg
-		fail(channel.side + ' open failed: ' + errMsg)
+		serialChannel.lastError = errMsg
+		fail('open failed: ' + errMsg)
 	})
 }
 
-function closeChannel(channel: MotorChannel) {
-	if (channel.portId <= 0) {
-		channel.rxBuffer = ''
+function closeChannel() {
+	if (serialChannel.portId <= 0) {
+		serialChannel.rxBuffer = ''
+		deviceReady = false
 		return
 	}
-	const closingPortId = channel.portId
-	channel.portId = 0
-	channel.rxBuffer = ''
+	const closingPortId = serialChannel.portId
+	serialChannel.portId = 0
+	serialChannel.rxBuffer = ''
+	deviceReady = false
 	closeSerialBridge(closingPortId, () => {}, (errMsg) => {
-		channel.lastError = errMsg
+		serialChannel.lastError = errMsg
 	}, () => {
 		emitStatus()
 	})
 }
 
-function openEnabledChannels(channels: MotorChannel[], index: number, baudRate: number, success: () => void, fail: (message: string) => void) {
-	if (index >= channels.length) {
-		success()
+function clearProbeTimer() {
+	if (probeTimer != 0) {
+		clearTimeout(probeTimer)
+		probeTimer = 0
+	}
+}
+
+function finishProbeSuccess() {
+	if (!isProbing) {
 		return
 	}
-	const channel = channels[index]
-	const defaultBaudRate = channel.side == 'right' ? MOTOR_SERIAL_PORTS.right.baudRate : MOTOR_SERIAL_PORTS.left.baudRate
-	const channelBaudRate = baudRate > 0 ? baudRate : defaultBaudRate
-	openChannel(channel, channel.path, channelBaudRate, () => {
-		openEnabledChannels(channels, index + 1, baudRate, success, fail)
-	}, (errMsg) => {
-		let closeIndex = 0
-		while (closeIndex < index) {
-			closeChannel(channels[closeIndex])
-			closeIndex += 1
-		}
-		fail(errMsg)
-	})
+	clearProbeTimer()
+	isProbing = false
+	isConnecting = false
+	deviceReady = true
+	console.log('[serialRuntime] 下位机通信就绪：已收到合法 A9 回包 path=' + serialChannel.path + ' portId=' + serialChannel.portId.toString())
+	syncReading()
+	emitStatus()
+	flushConnectSuccess()
+}
+
+function finishProbeFail(message: string) {
+	if (!isProbing) {
+		return
+	}
+	clearProbeTimer()
+	isProbing = false
+	isConnecting = false
+	deviceReady = false
+	serialChannel.lastError = message
+	console.log('[serialRuntime] 下位机探测失败: ' + message)
+	stopChannelReading()
+	closeChannel()
+	emitStatus()
+	flushConnectFail(message)
+}
+
+function startDeviceProbe() {
+	isProbing = true
+	deviceReady = false
+	serialChannel.lastError = ''
+	sendD180FrameIfPortOpen(5, FORCE_MODE.OFF)
+	syncReading()
+	probeTimer = setTimeout(() => {
+		finishProbeFail('下位机探测超时: no A9 response')
+	}, PROBE_TIMEOUT)
 }
 
 export function connectSerial(path: string, baudRate: number, success: () => void, fail: (message: string) => void) {
-	const legacyPath = path
 	if (serialDebugMode) {
-		console.log('[serialRuntime] debug mode enabled, skip connectSerial and report connected=true')
+		console.log('[serialRuntime] DEBUG_MODE=true，跳过 connectSerial 并上报 connected=true')
 		success()
 		emitStatus()
 		return
 	}
 	if (isConnected()) {
-		console.log('[serialRuntime] connectSerial skipped: already connected profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' leftPortId=' + leftChannel.portId.toString() + ' rightPortId=' + rightChannel.portId.toString())
+		console.log('[serialRuntime] 跳过 connectSerial：下位机已连接 path=' + serialChannel.path + ' portId=' + serialChannel.portId.toString())
 		success()
 		return
 	}
 	if (isConnecting) {
-		console.log('[serialRuntime] connectSerial queued: connection already in progress')
+		console.log('[serialRuntime] connectSerial 已排队：当前正在连接')
 		connectSuccessListeners.push(success)
 		connectFailListeners.push(fail)
 		return
@@ -436,24 +356,19 @@ export function connectSerial(path: string, baudRate: number, success: () => voi
 	connectSuccessListeners.push(success)
 	connectFailListeners.push(fail)
 
-	const channels = getEnabledChannels()
-	const activeBaudRate = baudRate > 0 ? baudRate : MOTOR_SERIAL_PORTS.left.baudRate
-	console.log('[serialRuntime] connectSerial begin debugMode=false profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' primaryPath=' + MOTOR_SERIAL_PATH + ' baudRate=' + activeBaudRate.toString())
-	if (legacyPath.length > 0 && legacyPath != MOTOR_SERIAL_PATH) {
-		console.log('[serialRuntime] ignore legacy path: ' + legacyPath + ', using profile primary path=' + MOTOR_SERIAL_PATH)
-	}
+	const activePath = path.length > 0 ? path : MOTOR_SERIAL_PATH
+	const activeBaudRate = baudRate > 0 ? baudRate : MOTOR_BAUD_RATE
+	console.log('[serialRuntime] 开始连接串口 DEBUG_MODE=false（不跳过串口连接） path=' + activePath + ' baudRate=' + activeBaudRate.toString())
 
-	openEnabledChannels(channels, 0, activeBaudRate, () => {
-		isConnecting = false
-		resetFrameCache()
-		console.log('[serialRuntime] motor serial ready profile=' + MOTOR_SERIAL_PROFILE + ' mode=' + MOTOR_SERIAL_MODE + ' leftPath=' + leftChannel.path + ' leftPortId=' + leftChannel.portId.toString() + ' rightPath=' + rightChannel.path + ' rightPortId=' + rightChannel.portId.toString())
+	openChannel(activePath, activeBaudRate, () => {
+		console.log('[serialRuntime] 串口节点已打开 path=' + serialChannel.path + ' portId=' + serialChannel.portId.toString() + '，开始探测下位机 A9 回包')
 		emitStatus()
-		flushConnectSuccess()
-	}, (leftErrMsg) => {
+		startDeviceProbe()
+	}, (errMsg) => {
 		isConnecting = false
-		console.log('[serialRuntime] connectSerial failed: ' + leftErrMsg)
+		console.log('[serialRuntime] 串口连接失败: ' + errMsg)
 		emitStatus()
-		flushConnectFail(leftErrMsg)
+		flushConnectFail(errMsg)
 	})
 }
 
@@ -461,10 +376,10 @@ export function disconnectSerial() {
 	stopWorking()
 	manualReadLocks = 0
 	shutdownReadActive = false
-	stopAllChannelReading()
-	closeChannel(leftChannel)
-	closeChannel(rightChannel)
-	resetFrameCache()
+	clearProbeTimer()
+	isProbing = false
+	stopChannelReading()
+	closeChannel()
 	emitStatus()
 }
 
@@ -483,80 +398,66 @@ export function stopReading() {
 }
 
 function shouldRead(): boolean {
-	return isConnected() && (manualReadLocks > 0 || isWorking || shutdownReadActive)
+	return isPortOpen() && (manualReadLocks > 0 || isWorking || shutdownReadActive || isProbing)
 }
 
 function syncReading() {
 	if (shouldRead()) {
-		const channels = getEnabledChannels()
-		let i = 0
-		while (i < channels.length) {
-			startChannelReading(channels[i])
-			i += 1
-		}
+		startChannelReading()
 		return
 	}
-	stopAllChannelReading()
+	stopChannelReading()
 }
 
-function stopAllChannelReading() {
-	const channels = getEnabledChannels()
-	let i = 0
-	while (i < channels.length) {
-		stopChannelReading(channels[i])
-		i += 1
-	}
-}
-
-function startChannelReading(channel: MotorChannel) {
-	if (channel.portId <= 0 || channel.readTimer != 0) {
+function startChannelReading() {
+	if (serialChannel.portId <= 0 || serialChannel.readTimer != 0) {
 		return
 	}
-	channel.readLoopId += 1
-	scheduleRead(channel, channel.readLoopId, 0)
+	serialChannel.readLoopId += 1
+	scheduleRead(serialChannel.readLoopId, 0)
 }
 
-function stopChannelReading(channel: MotorChannel) {
-	if (channel.readTimer != 0) {
-		clearTimeout(channel.readTimer)
-		channel.readTimer = 0
+function stopChannelReading() {
+	if (serialChannel.readTimer != 0) {
+		clearTimeout(serialChannel.readTimer)
+		serialChannel.readTimer = 0
 	}
-	channel.readLoopId += 1
-	channel.rxBuffer = ''
+	serialChannel.readLoopId += 1
+	serialChannel.rxBuffer = ''
 }
 
-function scheduleRead(channel: MotorChannel, loopId: number, delay: number) {
-	channel.readTimer = setTimeout(() => {
-		channel.readTimer = 0
-		performRead(channel, loopId)
+function scheduleRead(loopId: number, delay: number) {
+	serialChannel.readTimer = setTimeout(() => {
+		serialChannel.readTimer = 0
+		performRead(loopId)
 	}, delay)
 }
 
-function performRead(channel: MotorChannel, loopId: number) {
-	if (loopId != channel.readLoopId || channel.portId <= 0) {
+function performRead(loopId: number) {
+	if (loopId != serialChannel.readLoopId || serialChannel.portId <= 0) {
 		return
 	}
-	readSerialBridge(channel.portId, READ_LENGTH, READ_TIMEOUT, (data, bytesRead) => {
-		if (loopId != channel.readLoopId) {
+	readSerialBridge(serialChannel.portId, READ_LENGTH, READ_TIMEOUT, (data, bytesRead) => {
+		if (loopId != serialChannel.readLoopId) {
 			return
 		}
 		if (bytesRead > 0) {
-			channel.rawCount += 1
-			handleReceivedData(channel, data)
+			serialChannel.rawCount += 1
+			handleReceivedData(data)
 		}
-		if (channel.portId > 0 && loopId == channel.readLoopId) {
-			scheduleRead(channel, loopId, READ_INTERVAL)
+		if (serialChannel.portId > 0 && loopId == serialChannel.readLoopId) {
+			scheduleRead(loopId, READ_INTERVAL)
 		}
 		emitStatus()
 	}, (errCode, errMsg) => {
-		if (loopId != channel.readLoopId) {
+		if (loopId != serialChannel.readLoopId) {
 			return
 		}
 		if (errCode != 10003) {
-			channel.lastError = errMsg
+			serialChannel.lastError = errMsg
 		}
-		if (channel.portId > 0) {
-			scheduleRead(channel, loopId, READ_INTERVAL)
+		if (serialChannel.portId > 0) {
+			scheduleRead(loopId, READ_INTERVAL)
 		}
 		emitStatus()
 	})
@@ -564,14 +465,8 @@ function performRead(channel: MotorChannel, loopId: number) {
 
 export function startWorking(force: number, mode: number, interval: number = 200) {
 	if (!isConnected()) {
-		const channels = getEnabledChannels()
-		let i = 0
-		while (i < channels.length) {
-			const channel = channels[i]
-			channel.lastError = isChannelConnected(channel) ? channel.lastError : channel.side + ' serial not connected'
-			i += 1
-		}
-		console.log('[serialRuntime] startWorking blocked: connected=false debugMode=' + serialDebugMode.toString() + ' connecting=' + isConnecting.toString() + ' leftPortId=' + leftChannel.portId.toString() + ' rightPortId=' + rightChannel.portId.toString() + ' lastError=' + getLastError())
+		serialChannel.lastError = serialChannel.portId > 0 ? '下位机未就绪: no A9 response' : '串口未连接'
+		console.log('[serialRuntime] 阻止开启力量：connected=false DEBUG_MODE=' + serialDebugMode.toString() + ' connecting=' + isConnecting.toString() + ' portId=' + serialChannel.portId.toString() + ' lastError=' + serialChannel.lastError)
 		emitStatus()
 		return
 	}
@@ -580,10 +475,10 @@ export function startWorking(force: number, mode: number, interval: number = 200
 	workingForce = force
 	workingMode = mode
 	isWorking = true
-	console.log('[serialRuntime] startWorking force=' + force.toString() + ' mode=' + mode.toString() + ' interval=' + interval.toString() + ' debugMode=' + serialDebugMode.toString() + ' profile=' + MOTOR_SERIAL_PROFILE + ' serialMode=' + MOTOR_SERIAL_MODE)
-	sendD180FrameToEnabled(workingForce, workingMode)
+	console.log('[serialRuntime] 开启力量输出 force=' + force.toString() + ' mode=' + mode.toString() + ' interval=' + interval.toString() + ' DEBUG_MODE=' + serialDebugMode.toString() + ' path=' + serialChannel.path)
+	sendD180FrameIfPortOpen(workingForce, workingMode)
 	writeTimer = setInterval(() => {
-		sendD180FrameToEnabled(workingForce, workingMode)
+		sendD180FrameIfPortOpen(workingForce, workingMode)
 	}, interval)
 	syncReading()
 	emitStatus()
@@ -600,7 +495,7 @@ export function updateWorkingForce(force: number, mode: number = -1) {
 export function stopWorking() {
 	clearWorkingTimer()
 	clearShutdownTimers()
-	sendD180FrameToConnected(5, FORCE_MODE.OFF)
+	sendD180FrameIfPortOpen(5, FORCE_MODE.OFF)
 	isWorking = false
 	syncReading()
 	emitStatus()
@@ -610,14 +505,14 @@ export function stopForce(duration: number = 800, interval: number = 200) {
 	clearWorkingTimer()
 	clearShutdownTimers()
 	isWorking = false
-	if (!hasAnyConnectedChannel()) {
+	if (!hasOpenPort()) {
 		emitStatus()
 		return
 	}
 	shutdownReadActive = true
-	sendD180FrameToConnected(5, FORCE_MODE.OFF)
+	sendD180FrameIfPortOpen(5, FORCE_MODE.OFF)
 	shutdownTimer = setInterval(() => {
-		sendD180FrameToConnected(5, FORCE_MODE.OFF)
+		sendD180FrameIfPortOpen(5, FORCE_MODE.OFF)
 	}, interval)
 	shutdownEndTimer = setTimeout(() => {
 		clearShutdownTimers()
@@ -648,75 +543,51 @@ function clearShutdownTimers() {
 	shutdownReadActive = false
 }
 
-function hasAnyConnectedChannel(): boolean {
-	const channels = getEnabledChannels()
-	let i = 0
-	while (i < channels.length) {
-		if (channels[i].portId > 0) return true
-		i += 1
-	}
-	return false
+function hasOpenPort(): boolean {
+	return serialChannel.portId > 0
 }
 
-function sendD180FrameToEnabled(force: number, mode: number) {
-	const channels = getEnabledChannels()
-	let i = 0
-	while (i < channels.length) {
-		sendD180Frame(channels[i], force, mode)
-		i += 1
-	}
-}
-
-function sendD180FrameToConnected(force: number, mode: number) {
-	const channels = getEnabledChannels()
-	let i = 0
-	while (i < channels.length) {
-		if (channels[i].portId > 0) sendD180Frame(channels[i], force, mode)
-		i += 1
-	}
-}
-
-function sendD180Frame(channel: MotorChannel, force: number, mode: number) {
-	if (channel.portId <= 0) {
+function sendD180FrameIfPortOpen(force: number, mode: number) {
+	if (serialChannel.portId <= 0) {
 		return
 	}
 	const frame = buildD180Frame(force, mode)
-	writeSerialBridge(channel.portId, frame, 100, () => {}, (errMsg) => {
-		channel.lastError = errMsg
+	writeSerialBridge(serialChannel.portId, frame, 100, () => {}, (errMsg) => {
+		serialChannel.lastError = errMsg
 		emitStatus()
 	})
 }
 
-function handleReceivedData(channel: MotorChannel, hexData: string) {
-	channel.rxBuffer += hexData.toUpperCase()
-	if (channel.rxBuffer.length > 2048) {
-		channel.rxBuffer = channel.rxBuffer.substring(channel.rxBuffer.length - A9_FRAME_HEX_LENGTH * 2)
+function handleReceivedData(hexData: string) {
+	serialChannel.rxBuffer += hexData.toUpperCase()
+	if (serialChannel.rxBuffer.length > 2048) {
+		serialChannel.rxBuffer = serialChannel.rxBuffer.substring(serialChannel.rxBuffer.length - A9_FRAME_HEX_LENGTH * 2)
 	}
 
 	let loopCount = 0
 	while (loopCount < 10) {
 		loopCount += 1
-		const headIndex = findFrameHeadIndex(channel.rxBuffer)
+		const headIndex = findFrameHeadIndex(serialChannel.rxBuffer)
 		if (headIndex < 0) {
-			channel.rxBuffer = ''
+			serialChannel.rxBuffer = ''
 			return
 		}
 		if (headIndex > 0) {
-			channel.rxBuffer = channel.rxBuffer.substring(headIndex)
+			serialChannel.rxBuffer = serialChannel.rxBuffer.substring(headIndex)
 		}
-		if (channel.rxBuffer.length < 4) {
+		if (serialChannel.rxBuffer.length < 4) {
 			return
 		}
-		const packType = parseInt(channel.rxBuffer.substring(2, 4), 16)
+		const packType = parseInt(serialChannel.rxBuffer.substring(2, 4), 16)
 		if (packType != A9_PACK_TYPE) {
-			channel.rxBuffer = channel.rxBuffer.substring(2)
+			serialChannel.rxBuffer = serialChannel.rxBuffer.substring(2)
 			continue
 		}
-		if (channel.rxBuffer.length < A9_FRAME_HEX_LENGTH) {
+		if (serialChannel.rxBuffer.length < A9_FRAME_HEX_LENGTH) {
 			return
 		}
-		const frameHex = channel.rxBuffer.substring(0, A9_FRAME_HEX_LENGTH)
-		channel.rxBuffer = channel.rxBuffer.substring(A9_FRAME_HEX_LENGTH)
+		const frameHex = serialChannel.rxBuffer.substring(0, A9_FRAME_HEX_LENGTH)
+		serialChannel.rxBuffer = serialChannel.rxBuffer.substring(A9_FRAME_HEX_LENGTH)
 		const bytes = hexToBytes(frameHex)
 		if (bytes[0] != FRAME_HEAD || bytes[A9_FRAME_LENGTH - 1] != FRAME_TAIL) {
 			continue
@@ -724,56 +595,15 @@ function handleReceivedData(channel: MotorChannel, hexData: string) {
 		const crcExpected = readUint16BE(bytes, A9_CRC_OFFSET)
 		const crcActual = computeCrc16Fixed(bytes, A9_CRC_OFFSET)
 		if (crcExpected != crcActual) {
-			channel.lastError = 'A9 crc check failed'
+			serialChannel.lastError = 'A9 crc check failed'
 			emitStatus()
 			continue
 		}
-		channel.frameCount += 1
-		handleParsedFrame(channel, parseA9Frame(bytes))
-	}
-}
-
-function handleParsedFrame(channel: MotorChannel, frame: SerialFrame) {
-	if (isSingleMotorProfile()) {
+		serialChannel.frameCount += 1
+		const frame = parseA9Frame(bytes)
+		deviceReady = true
 		emitFrame(frame)
-		return
-	}
-	if (channel.side == 'left') {
-		latestLeftFrame = frame
-		hasLeftFrame = true
-	} else {
-		latestRightFrame = frame
-		hasRightFrame = true
-	}
-	const composed = composeFrame()
-	if (composed != null) {
-		emitFrame(composed)
-	}
-}
-
-function composeFrame(): SerialFrame | null {
-	if (!hasLeftFrame || !hasRightFrame) {
-		return null
-	}
-	const leftFrame = latestLeftFrame
-	const rightFrame = latestRightFrame
-	const summaryFrame = rightFrame.ts >= leftFrame.ts ? rightFrame : leftFrame
-	const leftSide = leftFrame.left
-	const rightSide = rightFrame.right
-	return {
-		type: 'A9',
-		index: summaryFrame.index,
-		left: leftSide,
-		right: rightSide,
-		setForce: summaryFrame.setForce,
-		setForceMode: summaryFrame.setForceMode,
-		bothHandsPower: leftSide.power + rightSide.power,
-		calories: leftFrame.calories + rightFrame.calories,
-		sportTime: Math.max(leftFrame.sportTime, rightFrame.sportTime),
-		sportCount: Math.max(leftFrame.sportCount, rightFrame.sportCount),
-		busVoltage: summaryFrame.busVoltage,
-		sleepState: summaryFrame.sleepState,
-		ts: Date.now()
+		finishProbeSuccess()
 	}
 }
 

@@ -29,8 +29,8 @@
 			<text class="section-title">训练控制</text>
 			<view class="status-grid">
 				<view class="status-item">
-					<text class="status-label">连接</text>
-					<text class="status-value">{{ status.connected ? '已连接' : '未连接' }}</text>
+					<text class="status-label">下位机</text>
+					<text class="status-value">{{ deviceReadyText }}</text>
 				</view>
 				<view class="status-item">
 					<text class="status-label">工作</text>
@@ -45,12 +45,8 @@
 					<text class="status-value">{{ status.rawCount }}</text>
 				</view>
 				<view class="status-item">
-					<text class="status-label">Left</text>
-					<text class="status-value">{{ leftPortText }}</text>
-				</view>
-				<view class="status-item">
-					<text class="status-label">Right</text>
-					<text class="status-value">{{ rightPortText }}</text>
+					<text class="status-label">Serial</text>
+					<text class="status-value">{{ serialPortText }}</text>
 				</view>
 			</view>
 			<view class="form-row">
@@ -146,7 +142,7 @@ import {
 	stopForce,
 	updateWorkingForce
 } from '@/utils/serialRuntime.uts'
-import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE, MOTOR_SERIAL_PORTS } from '@/utils/serialConfig.uts'
+import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE } from '@/utils/serialConfig.uts'
 
 const serialPath = ref(MOTOR_SERIAL_PATH)
 const baudRate = ref(MOTOR_BAUD_RATE)
@@ -185,15 +181,13 @@ const leftPowerText = computed(() => `${leftPower.value}W`)
 const rightPowerText = computed(() => `${rightPower.value}W`)
 const caloriesText = computed(() => `${(calories.value / 1000).toFixed(2)}kcal`)
 const setForceText = computed(() => `${setForce.value}kg / mode ${setForceMode.value}`)
-const leftPortText = computed(() => {
-	const side = status.value.sides.left
-	const path = side.path.length > 0 ? side.path : MOTOR_SERIAL_PORTS.left.path
-	return (side.connected ? 'ON ' : 'OFF ') + path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+const deviceReadyText = computed(() => {
+	if (status.value.probing) return '探测中'
+	return status.value.connected ? '已响应' : '未响应'
 })
-const rightPortText = computed(() => {
-	const side = status.value.sides.right
-	const path = side.path.length > 0 ? side.path : MOTOR_SERIAL_PORTS.right.path
-	return (side.connected ? 'ON ' : 'OFF ') + path + ' raw ' + side.rawCount.toString() + ' A9 ' + side.frameCount.toString()
+const serialPortText = computed(() => {
+	const path = status.value.path.length > 0 ? status.value.path : MOTOR_SERIAL_PATH
+	return (status.value.portOpen ? 'ON ' : 'OFF ') + path + ' raw ' + status.value.rawCount.toString() + ' A9 ' + status.value.frameCount.toString()
 })
 
 function readInputValue(event: UniInputEvent): string {

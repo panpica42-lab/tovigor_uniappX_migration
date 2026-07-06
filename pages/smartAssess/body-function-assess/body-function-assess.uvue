@@ -1,7 +1,7 @@
 <template>
 	<view class="container">
 		<view class="header">
-			<CommonBackButton class="back-btn-position" />
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 			<text class="header-title">身体机能</text>
 		</view>
 
@@ -24,6 +24,11 @@
 <script setup lang="uts">
 import CommonBackButton from '@/components/ui-box/common-back-button.uvue'
 import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.uts'
+
+function handleBack() {
+	navigateBackOrReLaunch('/pages/smartAssess/first-skip')
+}
 </script>
 
 <style>
@@ -37,4 +42,3 @@ import CoachBoxEntry from '@/components/coach/coach-box-entry.uvue'
 .device-image { width: 500rpx; height: 500rpx; }
 .device-tip { margin-top: 26rpx; font-size: 24rpx; color: #777777; text-align: center; }
 </style>
-
