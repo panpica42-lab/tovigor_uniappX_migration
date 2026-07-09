@@ -1,0 +1,261 @@
+export type TovigorAuthUser = {
+	id: number
+	openid: string
+	unionid: string | null
+	nickname: string | null
+	avatarUrl: string | null
+}
+
+export type CreateQrSessionData = {
+	sessionId: string
+	qrContent: string
+	qrImageBase64: string
+	expiresAt: string
+}
+
+export type QrSessionStatusData = {
+	status: string
+	token: string | null
+	user: TovigorAuthUser | null
+}
+
+export type AuthApiResult<T> = {
+	ok: boolean
+	code: string
+	message: string
+	data: T | null
+}
+
+const AUTH_API_BASE_URL_KEY = 'tovigor_auth_api_base_url'
+const AUTH_TOKEN_KEY = 'tovigor_auth_token'
+const AUTH_USER_KEY = 'tovigor_auth_user'
+const FALLBACK_AUTH_API_BASE_URLS: string[] = [
+	'http://122.51.155.6:10086',
+	'http://192.168.2.100:8080',
+	'http://10.0.50.114:8080',
+	'http://10.0.2.2:8080',
+	'http://127.0.0.1:8080'
+]
+
+function trimTrailingSlash(value: string): string {
+	let next = value
+	while (next.endsWith('/')) {
+		next = next.substring(0, next.length - 1)
+	}
+	return next
+}
+
+export function getAuthApiBaseUrl(): string {
+	const stored = `${uni.getStorageSync(AUTH_API_BASE_URL_KEY)}`
+	if (stored.length > 0 && stored != 'null' && stored != 'undefined') return trimTrailingSlash(stored)
+	return FALLBACK_AUTH_API_BASE_URLS[0]
+}
+
+export function setAuthApiBaseUrl(baseUrl: string) {
+	uni.setStorageSync(AUTH_API_BASE_URL_KEY, trimTrailingSlash(baseUrl))
+}
+
+function readString(value: any | null): string {
+	if (value == null) return ''
+	return `${value}`
+}
+
+function readNullableString(value: any | null): string | null {
+	if (value == null) return null
+	const text = `${value}`
+	if (text == 'null' || text == 'undefined') return null
+	return text
+}
+
+function readBoolean(value: any | null): boolean {
+	return value == true || `${value}` == 'true'
+}
+
+function normalizeQrImage(base64: string): string {
+	if (base64.startsWith('data:image')) return base64
+	return 'data:image/png;base64,' + base64
+}
+
+function parseEnvelope(responseData: UTSJSONObject): AuthApiResult<any> {
+	const success = readBoolean(responseData['success'])
+	const code = readString(responseData['code'])
+	const message = readString(responseData['message'])
+	return {
+		ok: success,
+		code,
+		message,
+		data: success ? responseData['data'] : null
+	}
+}
+
+function parseCreateQrSessionData(raw: UTSJSONObject): CreateQrSessionData {
+	return {
+		sessionId: readString(raw['sessionId']),
+		qrContent: readString(raw['qrContent']),
+		qrImageBase64: normalizeQrImage(readString(raw['qrImageBase64'])),
+		expiresAt: readString(raw['expiresAt'])
+	}
+}
+
+function parseUser(raw: UTSJSONObject | null): TovigorAuthUser | null {
+	if (raw == null) return null
+	return {
+		id: parseInt(readString(raw['id']), 10),
+		openid: readString(raw['openid']),
+		unionid: readNullableString(raw['unionid']),
+		nickname: readNullableString(raw['nickname']),
+		avatarUrl: readNullableString(raw['avatarUrl'])
+	}
+}
+
+function parseQrSessionStatusData(raw: UTSJSONObject): QrSessionStatusData {
+	const userRaw = raw['user']
+	return {
+		status: readString(raw['status']),
+		token: readNullableString(raw['token']),
+		user: userRaw == null ? null : parseUser(userRaw as UTSJSONObject)
+	}
+}
+
+function getCandidateBaseUrls(): string[] {
+	const candidates: string[] = []
+	const stored = `${uni.getStorageSync(AUTH_API_BASE_URL_KEY)}`
+	if (stored.length > 0 && stored != 'null' && stored != 'undefined') candidates.push(trimTrailingSlash(stored))
+	for (let i = 0; i < FALLBACK_AUTH_API_BASE_URLS.length; i += 1) {
+		const baseUrl = FALLBACK_AUTH_API_BASE_URLS[i]
+		let exists = false
+		for (let j = 0; j < candidates.length; j += 1) {
+			if (candidates[j] == baseUrl) exists = true
+		}
+		if (!exists) candidates.push(baseUrl)
+	}
+	return candidates
+}
+
+function requestAuthWithBaseUrl(baseUrl: string, method: string, path: string, body: any | null, resolve: (result: AuthApiResult<any>) => void) {
+	uni.request({
+		url: baseUrl + path,
+		method,
+		data: body,
+		timeout: 8000,
+		success: (res) => {
+			const statusCode = res.statusCode
+			if (statusCode >= 200 && statusCode < 300) {
+				if (res.data == null) {
+					resolve({
+						ok: false,
+						code: 'EMPTY_RESPONSE',
+						message: '服务返回为空',
+						data: null
+					})
+					return
+				}
+				resolve(parseEnvelope(res.data as UTSJSONObject))
+				return
+			}
+			if (res.data != null) {
+				const envelope = parseEnvelope(res.data as UTSJSONObject)
+				if (envelope.message.length > 0 || envelope.code.length > 0) {
+					resolve({
+						ok: false,
+						code: envelope.code.length > 0 ? envelope.code : ('HTTP_' + statusCode.toString()),
+						message: envelope.message.length > 0 ? envelope.message : '服务响应异常',
+						data: null
+					})
+					return
+				}
+			}
+			resolve({
+				ok: false,
+				code: 'HTTP_' + statusCode.toString(),
+				message: '服务响应异常',
+				data: null
+			})
+		},
+		fail: () => {
+			resolve({
+				ok: false,
+				code: 'NETWORK_ERROR',
+				message: '无法连接登录服务',
+				data: null
+			})
+		}
+	})
+}
+
+function requestAuth(method: string, path: string, body: any | null, resolve: (result: AuthApiResult<any>) => void) {
+	requestAuthWithBaseUrl(getAuthApiBaseUrl(), method, path, body, resolve)
+}
+
+function createQrSessionWithCandidates(candidates: string[], index: number, resolve: (result: AuthApiResult<CreateQrSessionData>) => void) {
+	if (index >= candidates.length) {
+		resolve({
+			ok: false,
+			code: 'NETWORK_ERROR',
+			message: '无法连接登录服务',
+			data: null
+		})
+		return
+	}
+	const baseUrl = candidates[index]
+	requestAuthWithBaseUrl(baseUrl, 'POST', '/api/auth/qr-sessions', null, (result) => {
+		if (result.ok && result.data != null) {
+			setAuthApiBaseUrl(baseUrl)
+			resolve({
+				ok: true,
+				code: result.code,
+				message: result.message,
+				data: parseCreateQrSessionData(result.data as UTSJSONObject)
+			})
+			return
+		}
+		if (result.code == 'NETWORK_ERROR') {
+			createQrSessionWithCandidates(candidates, index + 1, resolve)
+			return
+		}
+		resolve({
+			ok: false,
+			code: result.code,
+			message: result.message,
+			data: null
+		})
+	})
+}
+
+export function createQrSession(resolve: (result: AuthApiResult<CreateQrSessionData>) => void) {
+	createQrSessionWithCandidates(getCandidateBaseUrls(), 0, resolve)
+}
+
+export function getQrSessionStatus(sessionId: string, resolve: (result: AuthApiResult<QrSessionStatusData>) => void) {
+	requestAuth('GET', '/api/auth/qr-sessions/' + sessionId, null, (result) => {
+		if (result.ok && result.data != null) {
+			resolve({
+				ok: true,
+				code: result.code,
+				message: result.message,
+				data: parseQrSessionStatusData(result.data as UTSJSONObject)
+			})
+			return
+		}
+		resolve({
+			ok: false,
+			code: result.code,
+			message: result.message,
+			data: null
+		})
+	})
+}
+
+export function saveAuthSession(token: string, user: TovigorAuthUser) {
+	uni.setStorageSync(AUTH_TOKEN_KEY, token)
+	uni.setStorageSync(AUTH_USER_KEY, JSON.stringify(user))
+}
+
+export function clearAuthSession() {
+	uni.removeStorageSync(AUTH_TOKEN_KEY)
+	uni.removeStorageSync(AUTH_USER_KEY)
+}
+
+export function getStoredAuthToken(): string {
+	return `${uni.getStorageSync(AUTH_TOKEN_KEY)}`
+}

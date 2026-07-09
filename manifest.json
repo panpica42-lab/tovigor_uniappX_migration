@@ -2,8 +2,8 @@
 	"name": "unIappX_dev",
 	"appid": "__UNI__BC18A90",
 	"description": "Tovigor uni-app X migration POC",
-	"versionName": "1.0.3",
-	"versionCode": "103",
+	"versionName": "1.0.4",
+	"versionCode": "104",
 	"vueVersion": "3",
 	"uni-app-x": {},
 	"uniStatistics": {
@@ -12,6 +12,7 @@
 	"app-android": {
 		"distribute": {
 			"permissions": [
+				"<uses-permission android:name=\"android.permission.INTERNET\"/>",
 				"<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
 				"<uses-permission android:name=\"android.permission.CHANGE_WIFI_STATE\"/>",
 				"<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
@@ -23,6 +24,7 @@
 				"arm64-v8a"
 			],
 			"modules": {
+				"uni-network": {},
 				"uni-location": {
 					"system": {}
 				}

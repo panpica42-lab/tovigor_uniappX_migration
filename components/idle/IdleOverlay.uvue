@@ -41,8 +41,8 @@
 <script setup lang="uts">
 const emit = defineEmits(['wake'])
 
-const backgroundVideoSrc = '/static/icons/partTrainingActivity/startTraining/vedio-placeHolder.mp4'
-const backgroundPosterSrc = '/static/icons/partTrainingActivity/startTraining/vedio-placeHolder-poster.jpg'
+const backgroundVideoSrc = '/static/icons/ads/idle-background.mp4'
+const backgroundPosterSrc = '/static/icons/ads/idle-background-poster.jpg'
 const showBackgroundVideo = ref(false)
 let videoContext: VideoContext | null = null
 let videoRetryTimer = 0

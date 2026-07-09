@@ -1,0 +1,2 @@
+// Temporary development switch. Set to false to restore QR login.
+export const SKIP_QR_LOGIN_FOR_DEV = false

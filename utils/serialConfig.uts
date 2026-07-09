@@ -26,7 +26,7 @@ function getSerialBoardConfig(board: SerialBoardKey): SerialBoardConfig {
 }
 
 // 可选值：'3568' | '3576'
-export const ACTIVE_SERIAL_BOARD: SerialBoardKey = '3576'
+export const ACTIVE_SERIAL_BOARD: SerialBoardKey = '3568'
 
 export const SERIAL_DEVICES: SerialBoardConfig = getSerialBoardConfig(ACTIVE_SERIAL_BOARD)
 

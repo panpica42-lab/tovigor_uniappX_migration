@@ -1,0 +1,261 @@
+<template>
+	<view class="login-overlay">
+		<image class="login-bg" :src="backgroundSrc" mode="aspectFill" />
+		<view class="login-shade"></view>
+
+		<view class="login-panel">
+			<view class="qr-shell">
+				<image v-if="qrCodeSrc.length > 0" class="qr-image" :src="qrCodeSrc" mode="aspectFit" />
+				<view v-else class="qr-loading">
+					<text class="qr-loading-text">加载中</text>
+				</view>
+			</view>
+			<text class="login-title">微信扫码登录</text>
+			<text class="login-subtitle">登录后同步你的训练记录和个人方案</text>
+			<view class="status-row">
+				<view class="status-dot" :class="{ active: isPolling }"></view>
+				<text class="status-text">{{ statusText }}</text>
+			</view>
+			<view v-if="showRetry" class="retry-btn" @click="startLoginSession" @tap="startLoginSession">
+				<text class="retry-text">重新获取二维码</text>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+import {
+	createQrSession,
+	getQrSessionStatus,
+	saveAuthSession,
+	CreateQrSessionData,
+	QrSessionStatusData,
+	TovigorAuthUser,
+	AuthApiResult
+} from '@/utils/auth-api.uts'
+
+const emit = defineEmits(['success'])
+
+const backgroundSrc = '/static/icons/ads/login-background.jpg'
+const qrCodeSrc = ref('')
+const statusText = ref('正在获取登录二维码')
+const isPolling = ref(false)
+const showRetry = ref(false)
+const sessionId = ref('')
+let pollInterval = 0
+let hasSucceeded = false
+
+function stopPolling() {
+	if (pollInterval > 0) {
+		clearInterval(pollInterval)
+		pollInterval = 0
+	}
+	isPolling.value = false
+}
+
+function completeLogin(token: string, user: TovigorAuthUser) {
+	if (hasSucceeded) return
+	hasSucceeded = true
+	stopPolling()
+	saveAuthSession(token, user)
+	statusText.value = '登录成功'
+	emit('success')
+}
+
+function handleStatusResult(result: AuthApiResult<QrSessionStatusData>) {
+	if (!result.ok || result.data == null) {
+		statusText.value = result.message.length > 0 ? result.message : '登录状态获取失败'
+		return
+	}
+	const data = result.data!
+	if (data.status == 'CONFIRMED' && data.token != null && data.user != null) {
+		completeLogin(data.token!, data.user!)
+		return
+	}
+	if (data.status == 'EXPIRED') {
+		stopPolling()
+		statusText.value = '二维码已过期'
+		showRetry.value = true
+		return
+	}
+	statusText.value = '等待微信扫码'
+}
+
+function startPolling() {
+	stopPolling()
+	isPolling.value = true
+	pollInterval = setInterval(() => {
+		if (hasSucceeded || sessionId.value.length == 0) return
+		getQrSessionStatus(sessionId.value, handleStatusResult)
+	}, 2000)
+}
+
+function handleCreateSessionResult(result: AuthApiResult<CreateQrSessionData>) {
+	if (!result.ok || result.data == null) {
+		stopPolling()
+		statusText.value = result.message.length > 0 ? result.message : '二维码获取失败'
+		showRetry.value = true
+		return
+	}
+	const data = result.data!
+	sessionId.value = data.sessionId
+	qrCodeSrc.value = data.qrImageBase64
+	statusText.value = '等待微信扫码'
+	showRetry.value = false
+	startPolling()
+}
+
+function startLoginSession() {
+	stopPolling()
+	hasSucceeded = false
+	sessionId.value = ''
+	qrCodeSrc.value = ''
+	statusText.value = '正在获取登录二维码'
+	showRetry.value = false
+	createQrSession(handleCreateSessionResult)
+}
+
+onMounted(() => {
+	startLoginSession()
+})
+
+onBeforeUnmount(() => {
+	stopPolling()
+})
+</script>
+
+<style>
+.login-overlay {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 750rpx;
+	height: 100%;
+	background-color: #0b1115;
+	overflow: hidden;
+	z-index: 1001;
+	align-items: center;
+	justify-content: center;
+}
+
+.login-bg {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 750rpx;
+	height: 100%;
+	z-index: 0;
+}
+
+.login-shade {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 750rpx;
+	height: 100%;
+	z-index: 1;
+	background-color: rgba(0, 0, 0, 0.18);
+}
+
+.login-panel {
+	position: relative;
+	z-index: 2;
+	width: 430rpx;
+	padding: 34rpx 30rpx 30rpx;
+	border-radius: 24rpx;
+	background-color: rgba(255, 255, 255, 0.94);
+	align-items: center;
+	box-shadow: 0 22rpx 54rpx rgba(0, 0, 0, 0.24);
+}
+
+.qr-shell {
+	width: 270rpx;
+	height: 270rpx;
+	padding: 18rpx;
+	border-radius: 18rpx;
+	background-color: #ffffff;
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(17, 24, 39, 0.08);
+}
+
+.qr-image {
+	width: 234rpx;
+	height: 234rpx;
+}
+
+.qr-loading {
+	width: 234rpx;
+	height: 234rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: #f3f4f6;
+}
+
+.qr-loading-text {
+	font-size: 24rpx;
+	color: #6b7280;
+}
+
+.login-title {
+	margin-top: 26rpx;
+	font-size: 34rpx;
+	font-weight: 700;
+	color: #111827;
+	text-align: center;
+}
+
+.login-subtitle {
+	margin-top: 10rpx;
+	width: 360rpx;
+	font-size: 22rpx;
+	line-height: 32rpx;
+	color: #4b5563;
+	text-align: center;
+}
+
+.status-row {
+	margin-top: 22rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+
+.status-dot {
+	width: 12rpx;
+	height: 12rpx;
+	border-radius: 6rpx;
+	background-color: #9ca3af;
+	margin-right: 10rpx;
+}
+
+.status-dot.active {
+	background-color: #22c55e;
+}
+
+.status-text {
+	font-size: 22rpx;
+	color: #374151;
+}
+
+.retry-btn {
+	margin-top: 24rpx;
+	width: 220rpx;
+	height: 58rpx;
+	border-radius: 29rpx;
+	background-color: #111827;
+	align-items: center;
+	justify-content: center;
+}
+
+.retry-text {
+	font-size: 22rpx;
+	font-weight: 600;
+	color: #ffffff;
+}
+</style>

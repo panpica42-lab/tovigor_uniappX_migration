@@ -2,7 +2,7 @@
 	import { connectSerial, setSerialDebugMode } from '@/utils/serialRuntime.uts'
 	import { MOTOR_SERIAL_PATH, MOTOR_BAUD_RATE } from '@/utils/serialConfig.uts'
 
-	const DEBUG_MODE = true // true: 跳过串口连接，false: 不跳过串口连接
+	const DEBUG_MODE = false // true: 跳过串口连接，false: 不跳过串口连接
 
 	// #ifdef APP-ANDROID || APP-HARMONY
 	let firstBackTime = 0

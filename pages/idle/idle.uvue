@@ -1,13 +1,18 @@
 <template>
 	<view class="idle-page">
-		<IdleOverlay @wake="goHome" />
+		<IdleOverlay v-if="showIdleOverlay" @wake="showLoginOverlayFromIdle" />
+		<LoginQrOverlay v-if="showLoginOverlay" @success="goHome" />
 	</view>
 </template>
 
 <script setup lang="uts">
 import IdleOverlay from '@/components/idle/IdleOverlay.uvue'
+import LoginQrOverlay from '@/components/idle/LoginQrOverlay.uvue'
+import { SKIP_QR_LOGIN_FOR_DEV } from '@/utils/auth-config.uts'
 
 let isNavigating = false
+const showIdleOverlay = ref(true)
+const showLoginOverlay = ref(false)
 
 function goHome() {
 	if (isNavigating) return
@@ -26,6 +31,16 @@ function goHome() {
 			}, 500)
 		}
 	})
+}
+
+function showLoginOverlayFromIdle() {
+	if (SKIP_QR_LOGIN_FOR_DEV) {
+		console.log('[Auth] SKIP_QR_LOGIN_FOR_DEV=true，已跳过二维码登录，直接进入首页')
+		goHome()
+		return
+	}
+	showIdleOverlay.value = false
+	showLoginOverlay.value = true
 }
 </script>
 

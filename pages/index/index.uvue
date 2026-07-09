@@ -137,14 +137,17 @@
 			</view>
 		</view>
 
-		<IdleOverlay v-if="showIdleOverlay" @wake="hideIdleOverlay" />
+		<IdleOverlay v-if="showIdleOverlay" @wake="showLoginOverlayFromIdle" />
+		<LoginQrOverlay v-if="showLoginOverlay" @success="completeLogin" />
 	</view>
 </template>
 
 <script setup lang="uts">
 import IdleOverlay from '@/components/idle/IdleOverlay.uvue'
+import LoginQrOverlay from '@/components/idle/LoginQrOverlay.uvue'
 import { partTrainingCourses, PartTrainingCourse } from '@/pages/partTraining/course-data.uts'
 import { getAllCoaches } from '@/utils/coachManager.uts'
+import { SKIP_QR_LOGIN_FOR_DEV } from '@/utils/auth-config.uts'
 
 type ControlStates = {
 	light: boolean
@@ -177,6 +180,7 @@ function getInitialCourseScrollHeight(): number {
 const courseList = ref<PartTrainingCourse[]>(partTrainingCourses)
 const courseScrollHeight = ref(getInitialCourseScrollHeight())
 const showIdleOverlay = ref(true)
+const showLoginOverlay = ref(false)
 const showGuideModal = ref(false)
 const showBrightnessModal = ref(false)
 const brightnessValue = ref(60)
@@ -195,8 +199,18 @@ const guideItems = ref<GuideItem[]>([
 ])
 let partTrainingWarmupTimer = 0
 
-function hideIdleOverlay() {
+function showLoginOverlayFromIdle() {
 	showIdleOverlay.value = false
+	if (SKIP_QR_LOGIN_FOR_DEV) {
+		console.log('[Auth] SKIP_QR_LOGIN_FOR_DEV=true，已跳过二维码登录，显示首页内容')
+		showLoginOverlay.value = false
+		return
+	}
+	showLoginOverlay.value = true
+}
+
+function completeLogin() {
+	showLoginOverlay.value = false
 }
 
 function showUsageGuide() {
